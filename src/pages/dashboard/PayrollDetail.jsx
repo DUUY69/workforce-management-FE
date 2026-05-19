@@ -5,6 +5,7 @@ import { ArrowLeftIcon } from "@heroicons/react/24/solid";
 import api from "@/api";
 import { MobileCard, MobileListShell, MobileRow } from "@/components/mobile/MobileCard";
 import { formatHourlyRate } from "@/utils/formatMoney";
+import { formatBankLine } from "@/components/BankInfoModal";
 
 const statusColors = { Draft: "indigo", Approved: "blue", Paid: "green" };
 const statusLabels = { Draft: "Nháp", Approved: "Đã duyệt", Paid: "Đã trả" };
@@ -51,6 +52,9 @@ export default function PayrollDetail() {
                 <MobileRow label="Số giờ">{Number(d.workedHours).toFixed(1)}h</MobileRow>
                 <MobileRow label="Lương/giờ">{formatHourlyRate(d)}</MobileRow>
                 <MobileRow label="Hệ số">×{d.coefficient}</MobileRow>
+                <MobileRow label="Ngân hàng">{d.bankName || "—"}</MobileRow>
+                <MobileRow label="STK">{d.bankAccountNo || "—"}</MobileRow>
+                <MobileRow label="Chủ TK">{d.bankAccountName || "—"}</MobileRow>
                 <MobileRow label="Thực nhận"><span className="text-blue-gray-900 font-bold">{Number(d.netSalary).toLocaleString("vi-VN")} đ</span></MobileRow>
               </MobileCard>
             ))}
@@ -68,12 +72,13 @@ export default function PayrollDetail() {
                 <th className="px-4 py-2.5 text-right">Lương gộp</th>
                 <th className="px-4 py-2.5 text-right">Thưởng</th>
                 <th className="px-4 py-2.5 text-right">Khấu trừ</th>
+                <th className="px-4 py-2.5 text-left">Ngân hàng / STK</th>
                 <th className="px-4 py-2.5 text-right font-bold">Thực nhận</th>
               </tr>
             </thead>
             <tbody>
               {(payroll.details || []).length === 0 ? (
-                <tr><td colSpan={9} className="py-10 text-center text-gray-400">Không có dữ liệu</td></tr>
+                <tr><td colSpan={10} className="py-10 text-center text-gray-400">Không có dữ liệu</td></tr>
               ) : (payroll.details || []).map((d, i) => (
                 <tr key={d.id} className={i % 2 === 0 ? "bg-white" : "bg-blue-50/30"}>
                   <td className="px-4 py-2.5 font-medium">{d.employeeName} <span className="text-xs text-gray-400">({d.employeeCode})</span></td>
@@ -84,6 +89,7 @@ export default function PayrollDetail() {
                   <td className="px-4 py-2.5 text-right">{Number(d.grossSalary).toLocaleString("vi-VN")}</td>
                   <td className="px-4 py-2.5 text-right text-green-600">{d.bonus > 0 ? `+${Number(d.bonus).toLocaleString("vi-VN")}` : "—"}</td>
                   <td className="px-4 py-2.5 text-right text-red-500">{d.deduction > 0 ? `-${Number(d.deduction).toLocaleString("vi-VN")}` : "—"}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[220px]">{formatBankLine(d)}</td>
                   <td className="px-4 py-2.5 text-right font-bold text-blue-gray-800">{Number(d.netSalary).toLocaleString("vi-VN")} đ</td>
                 </tr>
               ))}

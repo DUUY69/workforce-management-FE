@@ -8,6 +8,7 @@ import {
   CompactFormPanel,
 } from "@/components/mobile/MobileCard";
 import SalaryModal from "@/components/SalaryModal";
+import BankInfoModal, { formatBankLine } from "@/components/BankInfoModal";
 import { formatHourlyRate } from "@/utils/formatMoney";
 import { formatDateVi, formatTenureVi } from "@/utils/dates";
 
@@ -25,9 +26,11 @@ export default function Employees() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [salaryModalEmp, setSalaryModalEmp] = useState(null);
+  const [bankModalEmp, setBankModalEmp] = useState(null);
   const [form, setForm] = useState({
     fullName: "", email: "", username: "", password: "", role: "Employee",
     phone: "", startDate: "", storeIds: [], baseSalaryPerHour: "", coefficient: "1.0",
+    bankAccountNo: "", bankName: "", bankAccountName: "",
   });
 
   const load = async () => {
@@ -68,6 +71,13 @@ export default function Employees() {
         onClose={() => setSalaryModalEmp(null)}
         onSaved={load}
       />
+      <BankInfoModal
+        open={!!bankModalEmp}
+        employee={bankModalEmp}
+        canEdit={isAdmin || isManager}
+        onClose={() => setBankModalEmp(null)}
+        onSaved={load}
+      />
 
       <Card className="border border-blue-gray-100">
         <CardHeader className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -95,6 +105,15 @@ export default function Employees() {
               </MobileField>
               <MobileField label="SĐT">
                 <MobileTextInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </MobileField>
+              <MobileField label="Tên ngân hàng">
+                <MobileTextInput value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} />
+              </MobileField>
+              <MobileField label="Số TK">
+                <MobileTextInput value={form.bankAccountNo} onChange={(e) => setForm({ ...form, bankAccountNo: e.target.value })} />
+              </MobileField>
+              <MobileField label="Tên chủ TK">
+                <MobileTextInput value={form.bankAccountName} onChange={(e) => setForm({ ...form, bankAccountName: e.target.value })} placeholder={form.fullName || "Họ tên không dấu"} />
               </MobileField>
               <MobileField label="Ngày vào làm" required>
                 <MobileTextInput type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
@@ -141,8 +160,11 @@ export default function Employees() {
                 <MobileRow label="Cửa hàng"><span className="text-xs font-normal text-right">{emp.storeNames?.join(", ") || "—"}</span></MobileRow>
                 <MobileRow label="Lương/giờ">{formatHourlyRate(emp.currentSalary)}</MobileRow>
                 <MobileRow label="Hệ số">{emp.currentSalary?.coefficient != null ? `×${emp.currentSalary.coefficient}` : "—"}</MobileRow>
-                {(canManageSalary || isAdmin) && (
+                <MobileRow label="Ngân hàng"><span className="text-xs text-right">{formatBankLine(emp)}</span></MobileRow>
+                {(canManageSalary || isAdmin || isManager) && (
                   <div className="flex flex-wrap gap-3 pt-2 border-t border-blue-gray-100">
+                    <button type="button" onClick={() => setBankModalEmp(emp)}
+                      className="text-xs text-indigo-600 font-medium">STK ngân hàng</button>
                     {canManageSalary && (
                       <button type="button" onClick={() => setSalaryModalEmp(emp)}
                         className="text-xs text-blue-600 font-medium">Lương & lịch sử</button>
@@ -172,15 +194,16 @@ export default function Employees() {
                   <th className="px-4 py-2.5 text-left">Cửa hàng</th>
                   <th className="px-4 py-2.5 text-right">Lương/giờ</th>
                   <th className="px-4 py-2.5 text-center">Hệ số</th>
+                  <th className="px-4 py-2.5 text-left">Ngân hàng / STK</th>
                   <th className="px-4 py-2.5 text-center">Trạng thái</th>
                   <th className="px-4 py-2.5 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={11} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
+                  <tr><td colSpan={12} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
                 ) : employees.length === 0 ? (
-                  <tr><td colSpan={11} className="py-10 text-center text-gray-400">Chưa có nhân viên</td></tr>
+                  <tr><td colSpan={12} className="py-10 text-center text-gray-400">Chưa có nhân viên</td></tr>
                 ) : employees.map((emp, i) => (
                   <tr key={emp.id} className={i % 2 === 0 ? "bg-white" : "bg-blue-50/30"}>
                     <td className="px-4 py-2.5 font-mono text-xs">{emp.employeeCode}</td>
@@ -197,11 +220,14 @@ export default function Employees() {
                     <td className="px-4 py-2.5 text-center text-gray-700">
                       {emp.currentSalary?.coefficient != null ? `×${emp.currentSalary.coefficient}` : "—"}
                     </td>
+                    <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[200px]">{formatBankLine(emp)}</td>
                     <td className="px-4 py-2.5 text-center">
                       <Chip size="sm" color={emp.isActive ? "green" : "gray"} value={emp.isActive ? "Đang làm" : "Nghỉ"} className="w-fit mx-auto" />
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       <div className="flex items-center justify-center gap-2 flex-wrap">
+                        <button type="button" onClick={() => setBankModalEmp(emp)}
+                          className="text-xs text-indigo-600 hover:underline">STK</button>
                         {canManageSalary && (
                           <button type="button" onClick={() => setSalaryModalEmp(emp)}
                             className="text-xs text-blue-600 hover:underline">Lương & lịch sử</button>

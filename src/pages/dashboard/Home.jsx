@@ -4,14 +4,16 @@ import { UserGroupIcon, BuildingStorefrontIcon, ClipboardDocumentCheckIcon, Bank
 import { useAuth } from "@/context/AuthContext";
 import api from "@/api";
 import SalaryModal from "@/components/SalaryModal";
+import BankInfoModal, { formatBankLine } from "@/components/BankInfoModal";
 import { fetchStores } from "@/utils/storesApi";
 import { formatDateVi, getWeekRangeISO } from "@/utils/dates";
 import { formatMoney } from "@/utils/formatMoney";
 
 export default function Home() {
-  const { currentUser, isAdmin, isManager, isEmployee } = useAuth();
+  const { currentUser, refreshUser, isAdmin, isManager, isEmployee } = useAuth();
   const [stats, setStats] = useState({ employees: 0, stores: 0, attendanceToday: 0 });
   const [showMySalary, setShowMySalary] = useState(false);
+  const [showMyBank, setShowMyBank] = useState(false);
   const [weekShifts, setWeekShifts] = useState([]);
   const [monthPayLabel, setMonthPayLabel] = useState("—");
   const weekRange = getWeekRangeISO();
@@ -97,21 +99,52 @@ export default function Home() {
         canEdit={false}
         onClose={() => setShowMySalary(false)}
       />
+      {isEmployee && currentUser?.employeeId && (
+        <BankInfoModal
+          open={showMyBank}
+          employee={{
+            id: currentUser.employeeId,
+            fullName: currentUser.fullName,
+            employeeCode: currentUser.employeeCode,
+            bankAccountNo: currentUser.bankAccountNo,
+            bankName: currentUser.bankName,
+            bankAccountName: currentUser.bankAccountName,
+          }}
+          canEdit
+          onClose={() => setShowMyBank(false)}
+          onSaved={refreshUser}
+        />
+      )}
       <Typography variant="h5" color="blue-gray" className="mb-6">
         Xin chào, {currentUser?.fullName} 👋
       </Typography>
       {isEmployee && currentUser?.employeeId && (
-        <Card className="border border-blue-gray-100 mb-4">
-          <CardBody className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <Typography variant="small" className="font-semibold text-blue-gray-800">Tiến trình lương</Typography>
-              <Typography variant="small" color="gray">Xem các mức lương đã áp dụng theo thời gian</Typography>
-            </div>
-            <Button size="sm" variant="outlined" onClick={() => setShowMySalary(true)}>
-              Lịch sử lương của tôi
-            </Button>
-          </CardBody>
-        </Card>
+        <>
+          <Card className="border border-blue-gray-100 mb-4">
+            <CardBody className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <Typography variant="small" className="font-semibold text-blue-gray-800">Tài khoản nhận lương</Typography>
+                <Typography variant="small" color="gray" className="mt-1 block">
+                  {formatBankLine(currentUser)}
+                </Typography>
+              </div>
+              <Button size="sm" variant="outlined" color="indigo" onClick={() => setShowMyBank(true)}>
+                Cập nhật STK
+              </Button>
+            </CardBody>
+          </Card>
+          <Card className="border border-blue-gray-100 mb-4">
+            <CardBody className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <Typography variant="small" className="font-semibold text-blue-gray-800">Tiến trình lương</Typography>
+                <Typography variant="small" color="gray">Xem các mức lương đã áp dụng theo thời gian</Typography>
+              </div>
+              <Button size="sm" variant="outlined" onClick={() => setShowMySalary(true)}>
+                Lịch sử lương của tôi
+              </Button>
+            </CardBody>
+          </Card>
+        </>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map((c) => (

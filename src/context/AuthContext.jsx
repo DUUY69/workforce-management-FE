@@ -31,6 +31,11 @@ export function AuthProvider({ children }) {
     return user;
   };
 
+  const refreshUser = async () => {
+    const res = await api.get("/auth/me");
+    setCurrentUser(res.data.data);
+  };
+
   const logout = async () => {
     const refreshToken = localStorage.getItem("wf_refresh_token");
     try { await api.post("/auth/logout", { refreshToken }); } catch {}
@@ -44,7 +49,7 @@ export function AuthProvider({ children }) {
   const isEmployee = currentUser?.role === "Employee";
 
   return (
-    <AuthContext.Provider value={{ currentUser, loading, login, logout, isAdmin, isManager, isEmployee }}>
+    <AuthContext.Provider value={{ currentUser, loading, login, logout, refreshUser, isAdmin, isManager, isEmployee }}>
       {children}
     </AuthContext.Provider>
   );
