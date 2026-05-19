@@ -33,15 +33,15 @@ export default function Dashboard() {
       )}
 
       {/* Sidenav */}
-      <aside className={`fixed top-0 left-0 z-40 h-full w-72 bg-white shadow-xl transition-transform duration-300
-        ${sideOpen ? "translate-x-0" : "-translate-x-full"} xl:translate-x-0`}>
+      <aside className={`fixed top-0 left-0 z-50 flex h-full w-72 flex-col bg-white shadow-xl transition-transform duration-300
+        ${sideOpen ? "translate-x-0" : "-translate-x-full"} xl:z-40 xl:translate-x-0`}>
         <div className="flex items-center justify-between px-6 py-5 border-b">
           <Typography variant="h6" color="blue-gray">Workforce Mgmt</Typography>
           <IconButton variant="text" className="xl:hidden" onClick={() => setSideOpen(false)}>
             <XMarkIcon className="w-5 h-5" />
           </IconButton>
         </div>
-        <nav className="flex flex-col gap-1 p-4">
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-4 min-h-0">
           {menuItems.map(({ path, name, icon }) => (
             <NavLink key={path} to={`/dashboard${path}`} end={path === "/home"}
               onClick={() => setSideOpen(false)}
@@ -54,7 +54,7 @@ export default function Dashboard() {
             </NavLink>
           ))}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t">
+        <div className="shrink-0 border-t bg-white p-4 pb-20 xl:pb-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
               {currentUser?.fullName?.[0] || "U"}

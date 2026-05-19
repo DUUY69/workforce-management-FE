@@ -12,6 +12,24 @@ export function formatDateVi(iso) {
   return `${day}/${m}/${y}`;
 }
 
+/** Thứ Hai–Chủ nhật của tuần chứa `from` (yyyy-MM-dd). */
+export function getWeekRangeISO(from = new Date()) {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const dow = d.getDay();
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + toMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (x) => {
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, "0");
+    const day = String(x.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  return { from: fmt(monday), to: fmt(sunday) };
+}
+
 /** Thời gian làm việc từ startDate (yyyy-MM-dd) — admin xem xét tăng lương. */
 export function formatTenureVi(startDateIso) {
   if (!startDateIso) return "—";

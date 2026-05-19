@@ -5,8 +5,6 @@ import {
   CalendarDaysIcon,
   ClipboardDocumentCheckIcon,
   BanknotesIcon,
-  ChartBarIcon,
-  Cog6ToothIcon,
 } from "@heroicons/react/24/solid";
 
 import Home from "@/pages/dashboard/Home";
@@ -16,7 +14,6 @@ import ShiftRegistrations from "@/pages/dashboard/ShiftRegistrations";
 import Attendance from "@/pages/dashboard/Attendance";
 import Payroll from "@/pages/dashboard/Payroll";
 import PayrollDetail from "@/pages/dashboard/PayrollDetail";
-import Reports from "@/pages/dashboard/Reports";
 
 const icon = { className: "w-5 h-5 text-inherit" };
 
@@ -28,7 +25,6 @@ export const dashboardRoutesConfig = [
   { path: "/attendance",          element: <Attendance />,         name: "Chấm công",      icon: <ClipboardDocumentCheckIcon {...icon} />,  roles: ["Admin","Manager","Employee"] },
   { path: "/payroll",             element: <Payroll />,            name: "Bảng lương",     icon: <BanknotesIcon {...icon} />,               roles: ["Admin","Manager","Employee"] },
   { path: "/payroll/:id",         element: <PayrollDetail />,      name: null,             icon: null,                                      roles: ["Admin","Manager"] },
-  { path: "/reports",             element: <Reports />,            name: "Báo cáo",        icon: <ChartBarIcon {...icon} />,                roles: ["Admin","Manager"] },
 ];
 
 export function getRoutesForRole(role) {
