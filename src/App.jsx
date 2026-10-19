@@ -1,8 +1,12 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { AssistantPanelProvider } from "@/widgets/assistant-panel-state";
 import Dashboard from "@/layouts/dashboard";
 import Auth from "@/layouts/auth";
-import Login from "@/pages/auth/Login";
+import CareersLayout from "@/layouts/CareersLayout";
+import CareersHome from "@/pages/careers/CareersHome";
+import JobDetail from "@/pages/careers/JobDetail";
+import BlogDetail from "@/pages/careers/BlogDetail";
 
 function AppRoutes() {
   const { currentUser, loading } = useAuth();
@@ -18,11 +22,16 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth/*" element={<Auth />} />
+      <Route path="/careers" element={<CareersLayout />}>
+        <Route index element={<CareersHome />} />
+        <Route path="jobs/:slug" element={<JobDetail />} />
+        <Route path="blog/:slug" element={<BlogDetail />} />
+      </Route>
       <Route
         path="/dashboard/*"
         element={currentUser ? <Dashboard /> : <Navigate to="/auth/login" replace />}
       />
-      <Route path="*" element={<Navigate to={currentUser ? "/dashboard/home" : "/auth/login"} replace />} />
+      <Route path="*" element={<Navigate to={currentUser ? "/dashboard/home" : "/careers"} replace />} />
     </Routes>
   );
 }
@@ -30,7 +39,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <AssistantPanelProvider>
+        <AppRoutes />
+      </AssistantPanelProvider>
     </AuthProvider>
   );
 }

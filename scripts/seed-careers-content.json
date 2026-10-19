@@ -1,0 +1,78 @@
+[
+  {
+    "key": "brands",
+    "title": "Thương hiệu của chúng tôi",
+    "subtitle": "Passio · Betea · Deer",
+    "content": "<p>Ba mô hình cửa hàng — mỗi thương hiệu có phong cách riêng, cùng một tiêu chuẩn phục vụ và cơ hội phát triển nghề nghiệp.</p>",
+    "imageUrl": "/images/brands/passio-store.png",
+    "sortOrder": 4,
+    "isActive": true,
+    "extra": {
+      "items": [
+        {
+          "name": "Passio Coffee",
+          "short": "Coffee to go",
+          "description": "Không gian hiện đại, tông xanh đặc trưng — phù hợp dân văn phòng cần cà phê chất lượng với tốc độ phục vụ cao.",
+          "imageUrl": "/images/brands/passio-store.png",
+          "logoUrl": "/images/brands/passio-logo.png",
+          "linkUrl": "/careers#jobs"
+        },
+        {
+          "name": "Betea",
+          "short": "Tea & trendy drinks",
+          "description": "Mô hình trà sữa và đồ uống trẻ trung — tập trung trải nghiệm tại quầy và sản phẩm theo xu hướng thị trường.",
+          "imageUrl": "/images/brands/betea-store.png",
+          "logoUrl": "/images/brands/betea-logo.png",
+          "linkUrl": "/careers#jobs"
+        },
+        {
+          "name": "Deer Coffee",
+          "short": "Community coffee",
+          "description": "Không gian ấm áp, hiện đại — chú trọng dịch vụ thân thiện và trải nghiệm khách hàng dài lâu cho nhóm bạn và gia đình.",
+          "imageUrl": "/images/brands/deer-store.png",
+          "logoUrl": "/images/brands/deer-logo.png",
+          "linkUrl": "/careers#jobs"
+        }
+      ]
+    }
+  },
+  {
+    "key": "contact",
+    "title": "Liên hệ tuyển dụng",
+    "content": "<p>Email: recruitment@passioncafe.vn</p><p>Hotline: 0900 000 000</p>",
+    "sortOrder": 7,
+    "isActive": true,
+    "extra": {
+      "footer": {
+        "siteName": "Passion Cafe",
+        "siteBadge": "PC",
+        "internalLabel": "Nội bộ",
+        "address": "74 Trường Sa, Phường 2, Quận Bình Thạnh, TP.HCM",
+        "phone": "(+84) 0900 000 000",
+        "email": "recruitment@passioncafe.vn",
+        "mapEmbedUrl": "https://maps.google.com/maps?q=10.8014,106.7148&z=14&output=embed",
+        "copyrightText": "Passion Cafe — Careers. All rights reserved.",
+        "internalUrl": "/auth/login",
+        "headerNav": [
+          { "label": "VỀ CHÚNG TÔI", "href": "/careers#about" },
+          { "label": "THƯƠNG HIỆU", "href": "/careers#brands" },
+          { "label": "VIỆC LÀM", "href": "/careers#jobs" },
+          { "label": "VÌ SAO GIA NHẬP", "href": "/careers#why-join" },
+          { "label": "TIN TỨC", "href": "/careers#blog" },
+          { "label": "LIÊN HỆ", "href": "/careers#contact" }
+        ],
+        "quickLinks": [
+          { "label": "Về chúng tôi", "href": "/careers#about" },
+          { "label": "Thương hiệu", "href": "/careers#brands" },
+          { "label": "Việc làm", "href": "/careers#jobs" },
+          { "label": "Tin tức", "href": "/careers#blog" }
+        ],
+        "socials": [
+          { "label": "Facebook", "href": "https://facebook.com", "icon": "fb" },
+          { "label": "Instagram", "href": "https://instagram.com", "icon": "ig" },
+          { "label": "LinkedIn", "href": "https://linkedin.com", "icon": "in" }
+        ]
+      }
+    }
+  }
+]

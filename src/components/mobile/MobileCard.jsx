@@ -1,4 +1,4 @@
-﻿import { Typography } from "@material-tailwind/react";
+import { Typography } from "@material-tailwind/react";
 
 export function MobileRow({ label, children, className = "" }) {
   return (
@@ -29,9 +29,17 @@ export function MobileField({ label, required, children, className = "", promine
 const fieldClass =
   "w-full rounded-lg border border-blue-gray-200 bg-white px-2.5 py-2 text-sm text-blue-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30";
 
-export function MobileTextInput({ value, onChange, type = "text", placeholder = "", step }) {
+export function MobileTextInput({ value, onChange, onBlur, type = "text", placeholder = "", step, className = "" }) {
   return (
-    <input type={type} step={step} value={value} placeholder={placeholder} onChange={onChange} className={fieldClass} />
+    <input
+      type={type}
+      step={step}
+      value={value}
+      placeholder={placeholder}
+      onChange={onChange}
+      onBlur={onBlur}
+      className={`${fieldClass} ${className}`.trim()}
+    />
   );
 }
 
@@ -70,6 +78,27 @@ export function CompactFormPanel({ title, hint, children, onSave, onCancel, save
           className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-gray-300 text-blue-gray-700 hover:bg-white">
           Hủy
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** Banner lỗi / cảnh báo — hiển thị rõ trên mobile (thay alert). */
+export function MobileNotice({ tone = "error", children, onDismiss, className = "" }) {
+  const tones = {
+    error: "border-red-300 bg-red-50 text-red-900",
+    warning: "border-amber-300 bg-amber-50 text-amber-950",
+    info: "border-blue-200 bg-blue-50 text-blue-900",
+  };
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 text-sm leading-relaxed ${tones[tone] || tones.error} ${className}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">{children}</div>
+        {onDismiss ? (
+          <button type="button" onClick={onDismiss} className="shrink-0 text-xs font-semibold underline opacity-80">
+            Đóng
+          </button>
+        ) : null}
       </div>
     </div>
   );

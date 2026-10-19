@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogHeader, DialogBody, DialogFooter, Button, Typography } from "@material-tailwind/react";
 import { MobileField, MobileTextInput } from "@/components/mobile/MobileCard";
 import api from "@/api";
+import { useAuth } from "@/context/AuthContext";
+import { toBankAccountHolderName } from "@/utils/formatMoney";
 
 const empty = { bankAccountNo: "", bankName: "", bankAccountName: "" };
 
@@ -13,6 +15,7 @@ export function formatBankLine(emp) {
 }
 
 export default function BankInfoModal({ open, employee, canEdit, onClose, onSaved }) {
+  const { currentUser } = useAuth();
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
 
@@ -21,7 +24,7 @@ export default function BankInfoModal({ open, employee, canEdit, onClose, onSave
     setForm({
       bankAccountNo: employee.bankAccountNo || "",
       bankName: employee.bankName || "",
-      bankAccountName: employee.bankAccountName || employee.fullName || "",
+      bankAccountName: toBankAccountHolderName(employee.bankAccountName || employee.fullName || ""),
     });
   }, [open, employee]);
 
@@ -31,12 +34,13 @@ export default function BankInfoModal({ open, employee, canEdit, onClose, onSave
       const body = {
         bankAccountNo: form.bankAccountNo.trim() || null,
         bankName: form.bankName.trim() || null,
-        bankAccountName: form.bankAccountName.trim() || null,
+        bankAccountName: toBankAccountHolderName(form.bankAccountName) || null,
       };
-      const url =
-        employee.id === "me" || !employee.id
-          ? "/employees/me/bank"
-          : `/employees/${employee.id}/bank`;
+      const isOwnProfile =
+        employee.id === "me" ||
+        !employee.id ||
+        (currentUser?.employeeId != null && Number(employee.id) === Number(currentUser.employeeId));
+      const url = isOwnProfile ? "/employees/me/bank" : `/employees/${employee.id}/bank`;
       await api.patch(url, body);
       onSaved?.();
       onClose();
@@ -75,10 +79,14 @@ export default function BankInfoModal({ open, employee, canEdit, onClose, onSave
             </MobileField>
             <MobileField label="Tên chủ tài khoản">
               <MobileTextInput
-                placeholder="Viết hoa không dấu (theo ngân hàng)"
+                placeholder="VD: DUONG THANH PHAT (HOA, không dấu)"
+                className="uppercase"
                 value={form.bankAccountName}
-                onChange={(e) => setForm({ ...form, bankAccountName: e.target.value })}
+                onChange={(e) => setForm({ ...form, bankAccountName: toBankAccountHolderName(e.target.value) })}
               />
+              <Typography variant="small" className="text-blue-gray-500 text-xs mt-1">
+                Tự chuyển HOA không dấu khi nhập.
+              </Typography>
             </MobileField>
           </>
         ) : (

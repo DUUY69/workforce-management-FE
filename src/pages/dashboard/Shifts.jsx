@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { Card, CardHeader, CardBody, Typography, Button, Input, Chip } from "@material-tailwind/react";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import SortIcon from "@/components/SortIcon";
+import { Card, CardBody, Typography, Button, Input, Chip } from "@material-tailwind/react";
 import { PlusIcon } from "@heroicons/react/24/solid";
 import api from "@/api";
 import { MobileCard, MobileListShell, MobileRow } from "@/components/mobile/MobileCard";
@@ -22,6 +24,8 @@ export default function Shifts() {
 
   useEffect(() => { load(); }, []);
 
+  const { sorted, sortKey, sortDir, handleSort } = useSortableTable(shifts);
+
   const handleCreate = async () => {
     try {
       await api.post("/shifts", { ...form, storeId: Number(form.storeId) });
@@ -38,12 +42,12 @@ export default function Shifts() {
   return (
     <div className="mt-4">
       <Card className="border border-blue-gray-100">
-        <CardHeader className="p-4 border-b flex items-center justify-between">
+        <div className="p-4 border-b flex items-center justify-between">
           <Typography variant="h6" color="blue-gray">Quản lý Ca làm việc</Typography>
           <Button size="sm" className="flex items-center gap-1" onClick={() => setShowForm(!showForm)}>
             <PlusIcon className="w-4 h-4" /> Thêm ca
           </Button>
-        </CardHeader>
+        </div>
         <CardBody className="p-0">
           {showForm && (
             <div className="p-4 border-b bg-blue-50/40">
@@ -87,22 +91,24 @@ export default function Shifts() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-blue-600 text-white">
-                <th className="px-4 py-2.5 text-left">Cửa hàng</th>
-                <th className="px-4 py-2.5 text-left">Tên ca</th>
-                <th className="px-4 py-2.5 text-center">Giờ bắt đầu</th>
-                <th className="px-4 py-2.5 text-center">Giờ kết thúc</th>
-                <th className="px-4 py-2.5 text-center">Số giờ</th>
-                <th className="px-4 py-2.5 text-center">Trạng thái</th>
+                <th className="px-4 py-2.5 text-center w-10">STT</th>
+                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("storeName")}>Cửa hàng <SortIcon active={sortKey === "storeName"} dir={sortDir} /></th>
+                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("name")}>Tên ca <SortIcon active={sortKey === "name"} dir={sortDir} /></th>
+                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("startTime")}>Giờ bắt đầu <SortIcon active={sortKey === "startTime"} dir={sortDir} /></th>
+                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("endTime")}>Giờ kết thúc <SortIcon active={sortKey === "endTime"} dir={sortDir} /></th>
+                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("workHours")}>Số giờ <SortIcon active={sortKey === "workHours"} dir={sortDir} /></th>
+                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("isActive")}>Trạng thái <SortIcon active={sortKey === "isActive"} dir={sortDir} /></th>
                 <th className="px-4 py-2.5 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
+                <tr><td colSpan={8} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
               ) : shifts.length === 0 ? (
-                <tr><td colSpan={7} className="py-10 text-center text-gray-400">Chưa có ca nào</td></tr>
-              ) : shifts.map((s, i) => (
+                <tr><td colSpan={8} className="py-10 text-center text-gray-400">Chưa có ca nào</td></tr>
+              ) : sorted.map((s, i) => (
                 <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-blue-50/30"}>
+                  <td className="px-4 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
                   <td className="px-4 py-2.5 text-gray-600">{s.storeName}</td>
                   <td className="px-4 py-2.5 font-medium">{s.name}</td>
                   <td className="px-4 py-2.5 text-center">{s.startTime}</td>

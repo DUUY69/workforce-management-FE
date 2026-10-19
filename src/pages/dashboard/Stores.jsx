@@ -1,43 +1,67 @@
 import { useState, useEffect } from "react";
-import { Card, CardHeader, CardBody, Typography, Button, Chip } from "@material-tailwind/react";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import SortIcon from "@/components/SortIcon";
+import { Card, CardBody, Typography, Button, Chip } from "@material-tailwind/react";
 import { PlusIcon } from "@heroicons/react/24/solid";
 import api from "@/api";
 import {
-  MobileCard, MobileListShell, MobileRow, MobileField, MobileTextInput,
+  MobileCard, MobileListShell, MobileRow, MobileField, MobileTextInput, MobileSelect,
   CompactFormPanel,
 } from "@/components/mobile/MobileCard";
 
+const emptyForm = () => ({
+  name: "", address: "", phone: "", brand: "", area: "",
+  standardWorkHoursPerDay: "8", overtimeRateMultiplier: "1.5",
+  managerEmployeeId: "",
+});
+
 export default function Stores() {
   const [stores, setStores] = useState([]);
+  const [managers, setManagers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", address: "", phone: "", standardWorkHoursPerDay: "8", overtimeRateMultiplier: "1.5" });
+  const [form, setForm] = useState(emptyForm());
 
   const load = async () => {
     setLoading(true);
-    try { const res = await api.get("/stores"); setStores(res.data.data || []); }
-    catch {} finally { setLoading(false); }
+    try {
+      const [storesRes, empRes] = await Promise.all([
+        api.get("/stores?includeInactive=true"),
+        api.get("/employees?isActive=true"),
+      ]);
+      setStores(storesRes.data.data || []);
+      const mgrs = (empRes.data.data || []).filter((e) => e.role === "Manager");
+      setManagers(mgrs);
+    } catch {} finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
-  const openCreate = () => { setEditing(null); setForm({ name: "", address: "", phone: "", standardWorkHoursPerDay: "8", overtimeRateMultiplier: "1.5" }); setShowForm(true); };
+  const { sorted, sortKey, sortDir, handleSort } = useSortableTable(stores);
+
+  const openCreate = () => { setEditing(null); setForm(emptyForm()); setShowForm(true); };
   const openEdit = (s) => {
     setEditing(s);
     setForm({
-      name: s.name, address: s.address || "", phone: s.phone || "",
+      name: s.name, address: s.address || "", phone: s.phone || "", brand: s.brand || "", area: s.area || "",
       standardWorkHoursPerDay: String(s.standardWorkHoursPerDay ?? 8),
       overtimeRateMultiplier: String(s.overtimeRateMultiplier ?? 1.5),
+      managerEmployeeId: s.managerEmployeeId ? String(s.managerEmployeeId) : "",
     });
     setShowForm(true);
   };
 
   const handleSave = async () => {
     const payload = {
-      ...form,
+      name: form.name,
+      address: form.address,
+      phone: form.phone,
+      brand: form.brand || null,
+      area: form.area || null,
       standardWorkHoursPerDay: Number(form.standardWorkHoursPerDay),
       overtimeRateMultiplier: Number(form.overtimeRateMultiplier),
+      managerEmployeeId: form.managerEmployeeId ? Number(form.managerEmployeeId) : null,
     };
     try {
       if (editing) await api.put(`/stores/${editing.id}`, payload);
@@ -52,17 +76,21 @@ export default function Stores() {
     catch (e) { alert(e?.response?.data?.message || "Lỗi"); }
   };
 
+  const managerLabel = (s) => {
+    if (s.managerName) return `${s.managerName}${s.managerCode ? ` (${s.managerCode})` : ""}`;
+    return "—";
+  };
+
   return (
     <div className="mt-4">
       <Card className="border border-blue-gray-100">
-        <CardHeader className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <Typography variant="h6" color="blue-gray">Quản lý Cửa hàng</Typography>
           <Button size="sm" className="flex items-center gap-1 w-full sm:w-auto justify-center" onClick={openCreate}>
             <PlusIcon className="w-4 h-4" /> Thêm cửa hàng
           </Button>
-        </CardHeader>
+        </div>
         <CardBody className="p-0">
-          {/* Form */}
           {showForm && (
             <CompactFormPanel
               title={editing ? "Sửa cửa hàng" : "Thêm cửa hàng mới"}
@@ -78,13 +106,26 @@ export default function Stores() {
               <MobileField label="SĐT">
                 <MobileTextInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </MobileField>
+              <MobileField label="Thương hiệu">
+                <MobileTextInput value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+              </MobileField>
+              <MobileField label="Khu vực">
+                <MobileTextInput value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} />
+              </MobileField>
+              <MobileField label="Quản lý cửa hàng" className="col-span-2">
+                <MobileSelect
+                  value={form.managerEmployeeId}
+                  onChange={(e) => setForm({ ...form, managerEmployeeId: e.target.value })}
+                >
+                  <option value="">— Chưa gán —</option>
+                  {managers.map((m) => (
+                    <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>
+                  ))}
+                </MobileSelect>
+              </MobileField>
               <MobileField label="Giờ chuẩn/ngày">
                 <MobileTextInput type="number" value={form.standardWorkHoursPerDay}
                   onChange={(e) => setForm({ ...form, standardWorkHoursPerDay: e.target.value })} />
-              </MobileField>
-              <MobileField label="Hệ số OT">
-                <MobileTextInput type="number" step="0.1" value={form.overtimeRateMultiplier}
-                  onChange={(e) => setForm({ ...form, overtimeRateMultiplier: e.target.value })} />
               </MobileField>
             </CompactFormPanel>
           )}
@@ -92,6 +133,9 @@ export default function Stores() {
             {stores.map((s) => (
               <MobileCard key={s.id}>
                 <Typography variant="small" className="font-semibold text-blue-gray-900">{s.name}</Typography>
+                <MobileRow label="Quản lý">{managerLabel(s)}</MobileRow>
+                <MobileRow label="Thương hiệu">{s.brand || "—"}</MobileRow>
+                <MobileRow label="Khu vực">{s.area || "—"}</MobileRow>
                 <MobileRow label="Địa chỉ">{s.address || "—"}</MobileRow>
                 <MobileRow label="SĐT">{s.phone || "—"}</MobileRow>
                 <MobileRow label="Nhân viên">{s.employeeCount}</MobileRow>
@@ -112,22 +156,26 @@ export default function Stores() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-blue-600 text-white">
-                <th className="px-4 py-2.5 text-left">Tên cửa hàng</th>
-                <th className="px-4 py-2.5 text-left">Địa chỉ</th>
+                <th className="px-4 py-2.5 text-center w-10">STT</th>
+                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("name")}>Tên cửa hàng <SortIcon active={sortKey === "name"} dir={sortDir} /></th>
+                <th className="px-4 py-2.5 text-left">Quản lý</th>
+                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("address")}>Địa chỉ <SortIcon active={sortKey === "address"} dir={sortDir} /></th>
                 <th className="px-4 py-2.5 text-left">SĐT</th>
-                <th className="px-4 py-2.5 text-center">NV</th>
-                <th className="px-4 py-2.5 text-center">Trạng thái</th>
+                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("employeeCount")}>NV <SortIcon active={sortKey === "employeeCount"} dir={sortDir} /></th>
+                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("isActive")}>Trạng thái <SortIcon active={sortKey === "isActive"} dir={sortDir} /></th>
                 <th className="px-4 py-2.5 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
+                <tr><td colSpan={8} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
               ) : stores.length === 0 ? (
-                <tr><td colSpan={6} className="py-10 text-center text-gray-400">Chưa có cửa hàng nào</td></tr>
-              ) : stores.map((s, i) => (
+                <tr><td colSpan={8} className="py-10 text-center text-gray-400">Chưa có cửa hàng nào</td></tr>
+              ) : sorted.map((s, i) => (
                 <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-blue-50/30"}>
+                  <td className="px-4 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
                   <td className="px-4 py-2.5 font-medium">{s.name}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{managerLabel(s)}</td>
                   <td className="px-4 py-2.5 text-gray-600">{s.address || "—"}</td>
                   <td className="px-4 py-2.5 text-gray-600">{s.phone || "—"}</td>
                   <td className="px-4 py-2.5 text-center">{s.employeeCount}</td>

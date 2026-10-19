@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardBody, Typography, Input, Button } from "@material-tailwind/react";
 import { useAuth } from "@/context/AuthContext";
@@ -10,15 +10,25 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    localStorage.removeItem("wf_access_token");
+    localStorage.removeItem("wf_refresh_token");
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await login(form.username, form.password);
+      await login(form.username.trim(), form.password);
       navigate("/dashboard/home");
     } catch (err) {
-      setError(err?.response?.data?.message || "Đăng nhập thất bại.");
+      const msg = err?.response?.data?.message;
+      if (!err?.response) {
+        setError("Không kết nối được server. Kiểm tra BE đang chạy (port 5001) và mở http://localhost:5174/auth/login");
+      } else {
+        setError(msg || "Đăng nhập thất bại.");
+      }
     } finally {
       setLoading(false);
     }
@@ -53,6 +63,9 @@ export default function Login() {
             <Button type="submit" fullWidth disabled={loading} className="mt-2">
               {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
+            <Typography color="gray" className="text-xs text-center mt-2">
+              Local: <strong>admin</strong> / <strong>Admin@123</strong>
+            </Typography>
           </form>
         </CardBody>
       </Card>

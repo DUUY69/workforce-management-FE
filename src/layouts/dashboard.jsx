@@ -1,22 +1,25 @@
-﻿import { Routes, Route, NavLink, useNavigate } from "react-router-dom";
+import { Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Typography, IconButton } from "@material-tailwind/react";
 import { Bars3Icon, XMarkIcon, ArrowRightOnRectangleIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/context/AuthContext";
 import { dashboardRoutesConfig, getRoutesForRole } from "@/routes";
+import AssistantPanel from "@/widgets/assistant-panel";
+import { assistantPanelMarginClass, useAssistantPanel } from "@/widgets/assistant-panel-state";
 
 export default function Dashboard() {
-  const { currentUser, logout, isAdmin, isManager } = useAuth();
+  const { currentUser, logout, isManager, effectiveRole, workMode, setWorkMode } = useAuth();
+  const { open: assistantOpen } = useAssistantPanel();
   const [sideOpen, setSideOpen] = useState(false);
   const navigate = useNavigate();
-  const menuItems = getRoutesForRole(currentUser?.role);
+  const menuItems = getRoutesForRole(effectiveRole);
 
   const BOTTOM_NAV = {
-    Admin:    ["/home", "/stores", "/employees", "/attendance", "/payroll"],
-    Manager:  ["/home", "/employees", "/attendance", "/shift-registrations", "/payroll"],
-    Employee: ["/home", "/shift-registrations", "/attendance", "/payroll"],
+    Admin:    ["/home", "/stores", "/employees", "/announcements", "/payroll", "/config"],
+    Manager:  ["/home", "/shift-registrations", "/attendance", "/employees", "/announcements"],
+    Employee: ["/home", "/shift-registrations", "/attendance", "/announcements", "/payroll", "/profile"],
   };
-  const bottomItems = (BOTTOM_NAV[currentUser?.role] || [])
+  const bottomItems = (BOTTOM_NAV[effectiveRole] || [])
     .map((p) => menuItems.find((m) => m.path === p))
     .filter(Boolean);
 
@@ -55,13 +58,40 @@ export default function Dashboard() {
           ))}
         </nav>
         <div className="shrink-0 border-t bg-white p-4 pb-20 xl:pb-4">
+          {isManager && (
+            <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-2.5">
+              <p className="text-xs font-semibold text-blue-gray-800 mb-1.5">Chế độ làm việc</p>
+              <div className="flex rounded-lg border border-blue-gray-200 overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => setWorkMode("manager")}
+                  className={`flex-1 px-2 py-2 font-medium ${workMode !== "employee" ? "bg-blue-600 text-white" : "bg-white text-blue-gray-600"}`}
+                >
+                  Quản lý
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setWorkMode("employee"); navigate("/dashboard/shift-registrations"); }}
+                  className={`flex-1 px-2 py-2 font-medium ${workMode === "employee" ? "bg-blue-600 text-white" : "bg-white text-blue-gray-600"}`}
+                >
+                  Nhân viên
+                </button>
+              </div>
+              <p className="text-[11px] text-blue-gray-600 mt-1.5 leading-snug">
+                Bấm <strong>Nhân viên</strong> để đăng ký ca / chấm công cho bản thân.
+              </p>
+            </div>
+          )}
           <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
               {currentUser?.fullName?.[0] || "U"}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-blue-gray-800 truncate">{currentUser?.fullName}</p>
-              <p className="text-xs text-blue-gray-400">{currentUser?.role}</p>
+              <p className="text-xs text-blue-gray-400">
+                {currentUser?.role}
+                {isManager && workMode === "employee" ? " · chế độ NV" : ""}
+              </p>
             </div>
           </div>
           <button onClick={handleLogout}
@@ -73,13 +103,34 @@ export default function Dashboard() {
       </aside>
 
       {/* Main */}
-      <div className="flex flex-col min-h-screen xl:ml-72">
+      <div className={`flex flex-col min-h-screen xl:ml-72 ${assistantPanelMarginClass(assistantOpen)}`}>
         {/* Topbar */}
         <header className="sticky top-0 z-20 bg-white border-b px-4 py-3 flex items-center gap-3">
           <IconButton variant="text" className="xl:hidden" onClick={() => setSideOpen(true)}>
             <Bars3Icon className="w-5 h-5" />
           </IconButton>
           <Typography variant="h6" color="blue-gray" className="flex-1">Workforce Management</Typography>
+          {isManager && (
+            <div className="flex flex-col items-end gap-0.5 shrink-0">
+              <span className="text-[10px] text-blue-gray-500 font-medium hidden sm:block">Chế độ</span>
+              <div className="flex rounded-lg border border-blue-gray-200 overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => setWorkMode("manager")}
+                  className={`px-3 py-1.5 font-medium ${workMode !== "employee" ? "bg-blue-600 text-white" : "bg-white text-blue-gray-600"}`}
+                >
+                  QL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setWorkMode("employee"); navigate("/dashboard/shift-registrations"); }}
+                  className={`px-3 py-1.5 font-medium ${workMode === "employee" ? "bg-blue-600 text-white" : "bg-white text-blue-gray-600"}`}
+                >
+                  NV
+                </button>
+              </div>
+            </div>
+          )}
         </header>
 
         <main className="flex-1 p-3 sm:p-4 pb-24 xl:pb-8 max-w-[100vw] overflow-x-hidden">
@@ -114,6 +165,7 @@ export default function Dashboard() {
           </div>
         </nav>
       )}
+      <AssistantPanel />
     </div>
   );
 }

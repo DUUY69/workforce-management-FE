@@ -1,9 +1,8 @@
 import axios from "axios";
 
-// Vercel: để trống VITE_API_BASE_URL → gọi /api cùng origin (vercel.json proxy → VPS)
-const BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.PROD ? "" : "http://localhost:5001");
+// Dev: để trống BASE_URL → Vite proxy /api → http://localhost:5001 (xem vite.config.js)
+// Prod/Vercel: để trống VITE_API_BASE_URL → gọi /api cùng origin
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 const api = axios.create({
   baseURL: `${BASE_URL}/api`,
