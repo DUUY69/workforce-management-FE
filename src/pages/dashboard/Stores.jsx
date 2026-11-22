@@ -33,7 +33,7 @@ export default function Stores() {
       setStores(storesRes.data.data || []);
       const mgrs = (empRes.data.data || []).filter((e) => e.role === "Manager");
       setManagers(mgrs);
-    } catch {} finally { setLoading(false); }
+    } catch { } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
@@ -76,6 +76,16 @@ export default function Stores() {
     catch (e) { alert(e?.response?.data?.message || "Lỗi"); }
   };
 
+  const regenerateQrKey = async (s) => {
+    if (!confirm(`Tạo lại Store Key mới cho "${s.name}"?\nLưu ý: Máy POS tại cửa hàng sẽ cần cập nhật lại key mới này.`)) return;
+    try {
+      await api.post(`/stores/${s.id}/regenerate-qr-key`);
+      load();
+    } catch (e) {
+      alert(e?.response?.data?.message || "Không thể tạo lại Store Key");
+    }
+  };
+
   const managerLabel = (s) => {
     if (s.managerName) return `${s.managerName}${s.managerCode ? ` (${s.managerCode})` : ""}`;
     return "—";
@@ -86,7 +96,7 @@ export default function Stores() {
       <Card className="border border-blue-gray-100">
         <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <Typography variant="h6" color="blue-gray">Quản lý Cửa hàng</Typography>
-          <Button size="sm" className="flex items-center gap-1 w-full sm:w-auto justify-center" onClick={openCreate}>
+          <Button size="sm" className="flex items-center gap-1 w-full sm:w-auto justify-center" data-guide="stores-open" onClick={openCreate}>
             <PlusIcon className="w-4 h-4" /> Thêm cửa hàng
           </Button>
         </div>
@@ -97,7 +107,7 @@ export default function Stores() {
               onSave={handleSave}
               onCancel={() => setShowForm(false)}
             >
-              <MobileField label="Tên cửa hàng" required className="col-span-2">
+              <MobileField guide="store-name" label="Tên cửa hàng" required className="col-span-2">
                 <MobileTextInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </MobileField>
               <MobileField label="Địa chỉ" className="col-span-2">
@@ -123,7 +133,7 @@ export default function Stores() {
                   ))}
                 </MobileSelect>
               </MobileField>
-              <MobileField label="Giờ chuẩn/ngày">
+              <MobileField guide="store-hours" label="Giờ chuẩn/ngày">
                 <MobileTextInput type="number" value={form.standardWorkHoursPerDay}
                   onChange={(e) => setForm({ ...form, standardWorkHoursPerDay: e.target.value })} />
               </MobileField>
@@ -139,6 +149,38 @@ export default function Stores() {
                 <MobileRow label="Địa chỉ">{s.address || "—"}</MobileRow>
                 <MobileRow label="SĐT">{s.phone || "—"}</MobileRow>
                 <MobileRow label="Nhân viên">{s.employeeCount}</MobileRow>
+                <MobileRow label="Mã POS Key">
+                  {s.qrSecretKey ? (
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono text-blue-gray-800">{s.qrSecretKey.slice(0, 14)}…</code>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(s.qrSecretKey);
+                          alert(`Đã sao chép Store Key của ${s.name}`);
+                        }}
+                        className="text-xs text-blue-600 font-medium"
+                      >
+                        Copy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => regenerateQrKey(s)}
+                        className="text-xs text-amber-700 font-medium"
+                      >
+                        Đổi key
+                      </button>
+                    </div>
+                  ) : (
+                  <button
+                    type="button"
+                    onClick={() => regenerateQrKey(s)}
+                    className="text-xs text-blue-600 font-medium ml-auto"
+                  >
+                    Tạo key
+                  </button>
+                  )}
+                </MobileRow>
                 <MobileRow label="Trạng thái">
                   <Chip size="sm" color={s.isActive ? "green" : "gray"} value={s.isActive ? "Hoạt động" : "Tạm dừng"} className="w-fit ml-auto" />
                 </MobileRow>
@@ -153,47 +195,82 @@ export default function Stores() {
           </MobileListShell>
 
           <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-blue-600 text-white">
-                <th className="px-4 py-2.5 text-center w-10">STT</th>
-                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("name")}>Tên cửa hàng <SortIcon active={sortKey === "name"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-left">Quản lý</th>
-                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("address")}>Địa chỉ <SortIcon active={sortKey === "address"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-left">SĐT</th>
-                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("employeeCount")}>NV <SortIcon active={sortKey === "employeeCount"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("isActive")}>Trạng thái <SortIcon active={sortKey === "isActive"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-center">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
-              ) : stores.length === 0 ? (
-                <tr><td colSpan={8} className="py-10 text-center text-gray-400">Chưa có cửa hàng nào</td></tr>
-              ) : sorted.map((s, i) => (
-                <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-blue-50/30"}>
-                  <td className="px-4 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
-                  <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{managerLabel(s)}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{s.address || "—"}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{s.phone || "—"}</td>
-                  <td className="px-4 py-2.5 text-center">{s.employeeCount}</td>
-                  <td className="px-4 py-2.5 text-center">
-                    <Chip size="sm" color={s.isActive ? "green" : "gray"} value={s.isActive ? "Hoạt động" : "Tạm dừng"} className="w-fit mx-auto" />
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => openEdit(s)} className="text-blue-600 hover:underline text-xs">Sửa</button>
-                      <button onClick={() => toggleActive(s)} className={`text-xs ${s.isActive ? "text-red-500" : "text-green-600"} hover:underline`}>
-                        {s.isActive ? "Vô hiệu" : "Kích hoạt"}
-                      </button>
-                    </div>
-                  </td>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-blue-600 text-white">
+                  <th className="px-4 py-2.5 text-center w-10">STT</th>
+                  <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("name")}>Tên cửa hàng <SortIcon active={sortKey === "name"} dir={sortDir} /></th>
+                  <th className="px-4 py-2.5 text-left">Quản lý</th>
+                  <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("address")}>Địa chỉ <SortIcon active={sortKey === "address"} dir={sortDir} /></th>
+                  <th className="px-4 py-2.5 text-left">SĐT</th>
+                  <th className="px-4 py-2.5 text-center">Mã POS Key</th>
+                  <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("employeeCount")}>NV <SortIcon active={sortKey === "employeeCount"} dir={sortDir} /></th>
+                  <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("isActive")}>Trạng thái <SortIcon active={sortKey === "isActive"} dir={sortDir} /></th>
+                  <th className="px-4 py-2.5 text-center">Thao tác</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={9} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
+                ) : stores.length === 0 ? (
+                  <tr><td colSpan={9} className="py-10 text-center text-gray-400">Chưa có cửa hàng nào</td></tr>
+                ) : sorted.map((s, i) => (
+                  <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-blue-50/30"}>
+                    <td className="px-4 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
+                    <td className="px-4 py-2.5 font-medium">{s.name}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{managerLabel(s)}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{s.address || "—"}</td>
+                    <td className="px-4 py-2.5 text-gray-600">{s.phone || "—"}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      {s.qrSecretKey ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <code className="text-[11px] bg-gray-100 px-2 py-0.5 rounded font-mono text-blue-gray-800 border border-gray-200 select-all">{s.qrSecretKey}</code>
+                          <button
+                            type="button"
+                            title="Sao chép Store Key cho máy POS"
+                            onClick={() => {
+                              navigator.clipboard.writeText(s.qrSecretKey);
+                              alert(`Đã sao chép Store Key của "${s.name}"! Hãy dán vào Cài đặt máy POS.`);
+                            }}
+                            className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 rounded border border-blue-200 font-medium"
+                          >
+                            Copy
+                          </button>
+                          <button
+                            type="button"
+                            title="Tạo lại Store Key mới"
+                            onClick={() => regenerateQrKey(s)}
+                            className="px-2 py-0.5 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 font-medium"
+                          >
+                            Đổi
+                          </button>
+                        </div>
+                      ) : (
+                      <button
+                        type="button"
+                        onClick={() => regenerateQrKey(s)}
+                        className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 rounded border border-blue-200 font-medium"
+                      >
+                        Tạo key
+                      </button>
+                    )}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">{s.employeeCount}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <Chip size="sm" color={s.isActive ? "green" : "gray"} value={s.isActive ? "Hoạt động" : "Tạm dừng"} className="w-fit mx-auto" />
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => openEdit(s)} className="text-blue-600 hover:underline text-xs">Sửa</button>
+                        <button onClick={() => toggleActive(s)} className={`text-xs ${s.isActive ? "text-red-500" : "text-green-600"} hover:underline`}>
+                          {s.isActive ? "Vô hiệu" : "Kích hoạt"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </CardBody>
       </Card>

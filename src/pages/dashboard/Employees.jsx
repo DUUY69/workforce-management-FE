@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSortableTable } from "@/hooks/useSortableTable";
 import SortIcon from "@/components/SortIcon";
 import { Card, CardBody, Typography, Button, Chip } from "@material-tailwind/react";
@@ -15,16 +15,10 @@ import StoreFaceEnrollModal from "@/components/StoreFaceEnrollModal";
 import { formatBankLine } from "@/components/BankInfoModal";
 import { formatHourlyRate } from "@/utils/formatMoney";
 import { formatDateVi, formatTenureVi } from "@/utils/dates";
-import { EDUCATION_LEVEL_OPTIONS, educationLevelLabel } from "@/utils/employeeHelpers";
+import { EDUCATION_LEVEL_OPTIONS, educationLevelLabel, roleLabel } from "@/utils/employeeHelpers";
 import VietnamAddressPicker from "@/components/VietnamAddressPicker";
 
 const EMPLOYEE_FILTER_DEFAULTS = { q: "", storeId: "", role: "", status: "" };
-
-function roleLabel(role) {
-  if (role === "Manager") return "Quản lý";
-  if (role === "Admin") return "Admin";
-  return "Nhân viên";
-}
 
 export default function Employees() {
   const { isAdmin, isManager } = useAuth();
@@ -217,7 +211,7 @@ export default function Employees() {
         <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <Typography variant="h6" color="blue-gray">Quản lý Nhân viên</Typography>
           {canCreateEmployee && (
-            <Button size="sm" className="flex items-center gap-1 w-full sm:w-auto justify-center" onClick={() => setShowForm(!showForm)}>
+            <Button size="sm" className="flex items-center gap-1 w-full sm:w-auto justify-center" data-guide="employees-open" onClick={() => setShowForm(!showForm)}>
               <PlusIcon className="w-4 h-4" /> Thêm nhân viên
             </Button>
           )}
@@ -275,10 +269,10 @@ export default function Employees() {
         <CardBody className="p-0">
           {showForm && canCreateEmployee && (
             <CompactFormPanel title="Thêm nhân viên mới" onSave={handleCreate} onCancel={() => setShowForm(false)}>
-              <MobileField label="Họ tên" required>
+              <MobileField guide="employee-name" label="Họ tên" required>
                 <MobileTextInput value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
               </MobileField>
-              <MobileField label="Username" required>
+              <MobileField guide="employee-user" label="Username" required>
                 <div className="flex gap-2">
                   <MobileTextInput
                     className="flex-1"
@@ -300,7 +294,7 @@ export default function Employees() {
                 </div>
                 <p className="text-xs text-blue-gray-500 mt-1">Username lưu trong bảng Users (toàn hệ thống), không chỉ danh sách NV bạn đang thấy.</p>
               </MobileField>
-              <MobileField label="Email" required>
+              <MobileField guide="employee-email" label="Email" required>
                 <MobileTextInput value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} onBlur={() => checkAvailability(form.username, form.email)} />
               </MobileField>
               {availHint && (
@@ -308,7 +302,7 @@ export default function Employees() {
                   {availHint}
                 </p>
               )}
-              <MobileField label="Mật khẩu" required>
+              <MobileField guide="employee-password" label="Mật khẩu" required>
                 <MobileTextInput type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
               </MobileField>
               <MobileField label="SĐT">
@@ -334,10 +328,10 @@ export default function Employees() {
               <MobileField label="Tên chủ TK">
                 <MobileTextInput value={form.bankAccountName} onChange={(e) => setForm({ ...form, bankAccountName: e.target.value })} placeholder={form.fullName || "Họ tên không dấu"} />
               </MobileField>
-              <MobileField label="Ngày vào làm" required>
+              <MobileField guide="employee-date" label="Ngày vào làm" required>
                 <MobileTextInput type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
               </MobileField>
-              <MobileField label="Bậc lương" className="col-span-2 sm:col-span-3">
+              <MobileField guide="employee-grade" label="Bậc lương" className="col-span-2 sm:col-span-3">
                 <MobileSelect
                   value={form.salaryGradeId}
                   onChange={(e) => {
@@ -375,7 +369,7 @@ export default function Employees() {
                   placeholder={form.salaryGradeId ? "Tự động từ bậc lương" : "Nhập thủ công..."}
                 />
               </MobileField>
-              <MobileField label="Vai trò">
+              <MobileField guide="employee-role" label="Vai trò">
                 {isAdmin ? (
                   <MobileSelect value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                     <option value="Employee">Nhân viên</option>
@@ -385,7 +379,7 @@ export default function Employees() {
                   <MobileTextInput value="Nhân viên" readOnly disabled className="bg-blue-gray-50" />
                 )}
               </MobileField>
-              <MobileField label="Cửa hàng chính" required className="col-span-2 sm:col-span-3">
+              <MobileField guide="employee-store" label="Cửa hàng chính" required className="col-span-2 sm:col-span-3">
                 <MobileSelect
                   value={form.primaryStoreId}
                   onChange={(e) => setForm({ ...form, primaryStoreId: e.target.value })}
@@ -440,7 +434,7 @@ export default function Employees() {
                   <MobileRow label="Vào làm">{emp.startDate ? formatDateVi(emp.startDate) : "—"}</MobileRow>
                   <MobileRow label="Thâm niên"><span className="text-blue-800">{formatTenureVi(emp.startDate)}</span></MobileRow>
                 </div>
-                <MobileRow label="Vai trò">
+                <MobileRow guide="employee-role" label="Vai trò">
                   <Chip size="sm" color={emp.role === "Manager" ? "blue" : "gray"} value={roleLabel(emp.role)} className="normal-case" />
                 </MobileRow>
                 <MobileRow label="SĐT">{emp.phone || "—"}</MobileRow>

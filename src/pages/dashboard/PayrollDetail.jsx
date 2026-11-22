@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSortableTable } from "@/hooks/useSortableTable";
 import SortIcon from "@/components/SortIcon";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MobileCard, MobileListShell, MobileRow, MobileField, MobileTextInput } from "@/components/mobile/MobileCard";
 import { PayslipLines } from "@/components/PayslipLines";
 import PayrollDailyHistoryModal from "@/components/PayrollDailyHistoryModal";
+import PayrollAllowanceModal from "@/components/PayrollAllowanceModal";
 import {
   formatHourlyRate,
   formatMoney,
@@ -25,6 +26,7 @@ import { formatBankLine } from "@/components/BankInfoModal";
 import { buildReturnSearch } from "@/utils/urlFilters";
 import { formatPayrollDateTime } from "@/utils/dates";
 import { exportPayrollExcel } from "@/utils/exportPayrollExcel";
+import { fetchEmployeePositionMap } from "@/utils/employeeHelpers";
 
 const statusColors = { Draft: "indigo", Approved: "blue", Paid: "green" };
 const statusLabels = { Draft: "Nháp", Approved: "Đã duyệt", Paid: "Đã trả" };
@@ -209,6 +211,7 @@ function buildInitEdits(details) {
     const { h, m } = splitHoursMinutes(d.workedHours);
     init[d.id] = {
       deliveryAllowance: moneyOrEmpty(d.deliveryAllowance),
+      allowances: d.allowances || [],
       note: d.note || "",
       bonus: moneyOrEmpty(d.bonus),
       deduction: moneyOrEmpty(d.deduction),
@@ -240,12 +243,17 @@ export default function PayrollDetail() {
   const [edits, setEdits] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportAbortRef = useRef(null);
+  useEffect(() => () => exportAbortRef.current?.abort(), []);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [noteModal, setNoteModal] = useState(null); // { detailId, name, canEdit }
+  const [allowanceModal, setAllowanceModal] = useState(null); // { detailId, employeeName, employeeCode, allowances, deliveryAllowance }
   const [dayHistory, setDayHistory] = useState(null); // { detailId }
+  const [showGuide, setShowGuide] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -352,6 +360,34 @@ export default function PayrollDetail() {
     });
   };
 
+  const openAllowanceModal = (d) => {
+    const e = edits[d.id] || {};
+    setAllowanceModal({
+      detailId: d.id,
+      employeeName: d.employeeName,
+      employeeCode: d.employeeCode,
+      allowances: e.allowances ?? d.allowances ?? [],
+      deliveryAllowance: e.deliveryAllowance !== undefined ? e.deliveryAllowance : d.deliveryAllowance,
+    });
+  };
+
+  const handleSaveAllowances = async (detailId, payload) => {
+    const newTotal = payload.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    patchEdit(detailId, {
+      allowances: payload,
+      deliveryAllowance: formatAmount(newTotal),
+    });
+
+    try {
+      await api.put(`/payrolls/${id}/details/${detailId}`, {
+        allowances: payload,
+      });
+      await load();
+    } catch (err) {
+      alert(err?.response?.data?.message || "Không lưu được phụ cấp");
+    }
+  };
+
   const saveRow = async (d) => {
     const e = edits[d.id] || {};
     const needsReconfirm =
@@ -367,12 +403,17 @@ export default function PayrollDetail() {
     setSavingId(d.id);
     try {
       const body = {
-        deliveryAllowance: parseEditMoney(e.deliveryAllowance, 0),
         note: e.note || null,
         bonus: e.bonus !== "" && e.bonus != null ? parseEditMoney(e.bonus, 0) : undefined,
         deduction: e.deduction !== "" && e.deduction != null ? parseEditMoney(e.deduction, 0) : undefined,
       };
+      if (e.allowances) {
+        body.allowances = e.allowances;
+      }
       if (isAdmin) {
+        if (!e.allowances && e.deliveryAllowance !== "" && e.deliveryAllowance != null) {
+          body.deliveryAllowance = parseEditMoney(e.deliveryAllowance, 0);
+        }
         if (e.grossSalary !== "" && e.grossSalary != null) body.grossSalary = parseEditMoney(e.grossSalary, 0);
         if (e.workedDays !== "" && e.workedDays != null) body.workedDays = parseEditNumber(e.workedDays, 0);
         if (e.attendanceDays !== "" && e.attendanceDays != null) body.attendanceDays = parseEditNumber(e.attendanceDays, 0);
@@ -539,48 +580,77 @@ export default function PayrollDetail() {
   }
 
   return (
-    <div className="mt-4">
-      <button onClick={backToList} className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-4">
-        <ArrowLeftIcon className="w-4 h-4" /> Quay lại
-      </button>
-      <Card className="border border-blue-gray-100">
-        <div className="p-4 border-b">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <Typography variant="h6" color="blue-gray">{payroll.storeName} — Tháng {payroll.month}/{payroll.year}</Typography>
-              <Typography variant="small" color="gray">
-                Tổng: {formatMoney(totalAmount)}
-                {" · "}Tạo: {formatPayrollDateTime(payroll.createdAt)}
-                {payroll.createdByName ? ` (${payroll.createdByName})` : ""}
-                {payroll.approvedAt
-                  ? ` · Duyệt: ${formatPayrollDateTime(payroll.approvedAt)}${payroll.approvedByName ? ` (${payroll.approvedByName})` : ""}`
-                  : ""}
-              </Typography>
+    <div className="mt-2 space-y-2">
+      <Card className="border border-blue-gray-100 shadow-sm">
+        <div className="px-4 py-3 border-b">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <button
+                onClick={backToList}
+                className="p-1.5 rounded-lg border border-blue-gray-200 hover:bg-blue-gray-50 text-blue-gray-700 transition-colors shrink-0"
+                title="Quay lại danh sách"
+              >
+                <ArrowLeftIcon className="w-4 h-4" />
+              </button>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Typography variant="h6" color="blue-gray" className="text-base font-bold leading-tight">
+                    {payroll.storeName} — Tháng {payroll.month}/{payroll.year}
+                  </Typography>
+                  <Chip
+                    size="sm"
+                    className="normal-case py-0.5 px-2 text-[11px]"
+                    color={statusColors[payroll.status] || "gray"}
+                    value={statusLabels[payroll.status] || payroll.status}
+                  />
+                </div>
+                <div className="flex items-center gap-x-2 text-xs text-gray-500 flex-wrap mt-0.5">
+                  <span>Tổng: <strong className="text-blue-gray-900">{formatMoney(totalAmount)}</strong></span>
+                  <span>•</span>
+                  <span>Tạo: {formatPayrollDateTime(payroll.createdAt)}{payroll.createdByName ? ` (${payroll.createdByName})` : ""}</span>
+                  {payroll.approvedAt && (
+                    <>
+                      <span>•</span>
+                      <span>Duyệt: {formatPayrollDateTime(payroll.approvedAt)}${payroll.approvedByName ? ` (${payroll.approvedByName})` : ""}</span>
+                    </>
+                  )}
+                  {(payroll.status === "Approved" || payroll.status === "Paid") && payroll.employeeConfirmDeadline && (
+                    <>
+                      <span>•</span>
+                      <span className="text-amber-700 font-medium">Hạn NV xác nhận: {formatPayrollDateTime(payroll.employeeConfirmDeadline)}</span>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Chip size="sm" color={statusColors[payroll.status] || "gray"} value={statusLabels[payroll.status] || payroll.status} />
+
+            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
               {canManage && payroll.status === "Draft" && (
-                <Button size="sm" color="blue" className="normal-case" disabled={statusBusy}
+                <Button size="sm" color="blue" className="normal-case py-1.5 px-3 text-xs" disabled={statusBusy}
                   onClick={() => changeStatus("approve")}>
                   {statusBusy ? "Đang duyệt..." : "Duyệt bảng lương"}
                 </Button>
               )}
               {canManage && payroll.status === "Approved" && (
-                <Button size="sm" color="green" className="normal-case" disabled={statusBusy}
+                <Button size="sm" color="green" className="normal-case py-1.5 px-3 text-xs" disabled={statusBusy}
                   onClick={() => changeStatus("pay")}>
                   {statusBusy ? "Đang xử lý..." : "Đánh dấu đã trả"}
                 </Button>
               )}
               {isAdmin && (payroll.status === "Approved" || payroll.status === "Paid") && (
-                <Button size="sm" variant="outlined" color="amber" className="normal-case" disabled={statusBusy}
+                <Button size="sm" variant="outlined" color="amber" className="normal-case py-1.5 px-3 text-xs" disabled={statusBusy}
                   onClick={() => changeStatus("revert")}>
                   {statusBusy ? "Đang thu hồi..." : "Thu hồi về Nháp"}
                 </Button>
               )}
               {canManage && (
-                <Button size="sm" variant="outlined" className="normal-case flex items-center gap-1"
-                  onClick={() => {
+                <Button size="sm" variant="outlined" className="normal-case py-1.5 px-3 text-xs flex items-center gap-1"
+                  disabled={exportBusy}
+                  onClick={async () => {
+                    if (exportBusy) return;
+                    const ctrl = new AbortController();
                     try {
+                      // Chụp giá trị đang sửa tại thời điểm bấm (không lưu lên server)
                       const rows = details.map((d) => {
                         const e = edits[d.id] || {};
                         return {
@@ -597,17 +667,26 @@ export default function PayrollDetail() {
                           bankAccountNo: e.bankAccountNo ?? d.bankAccountNo,
                         };
                       });
-                      exportPayrollExcel(payroll, rows, { getNet: calcNet });
+                      exportAbortRef.current = ctrl;
+                      setExportBusy(true);
+                      const positions = await fetchEmployeePositionMap(api, { signal: ctrl.signal });
+                      if (ctrl.signal.aborted) return;
+                      exportPayrollExcel(payroll, rows, { getNet: calcNet, positions });
                     } catch (err) {
-                      alert(err?.message || "Không xuất được Excel");
+                      if (!ctrl.signal.aborted) {
+                        alert(err?.response?.data?.message || err?.message || "Không xuất được Excel (không tải được hồ sơ nhân viên để lấy chức vụ)");
+                      }
+                    } finally {
+                      if (exportAbortRef.current === ctrl) exportAbortRef.current = null;
+                      setExportBusy(false);
                     }
                   }}
                 >
-                  <ArrowDownTrayIcon className="w-4 h-4" /> Xuất Excel
+                  <ArrowDownTrayIcon className="w-3.5 h-3.5" /> Xuất Excel
                 </Button>
               )}
               {canManage && (
-                <Button size="sm" variant="outlined" className="normal-case" onClick={loadLogs}>
+                <Button size="sm" variant="outlined" className="normal-case py-1.5 px-3 text-xs" onClick={loadLogs}>
                   Xem log{payroll.auditLogCount ? ` (${payroll.auditLogCount})` : ""}
                 </Button>
               )}
@@ -616,7 +695,7 @@ export default function PayrollDetail() {
                   size="sm"
                   variant="outlined"
                   color="red"
-                  className="normal-case"
+                  className="normal-case py-1.5 px-3 text-xs"
                   disabled={statusBusy}
                   onClick={async () => {
                     const label = `${payroll.storeName} — T.${payroll.month}/${payroll.year}`;
@@ -632,27 +711,37 @@ export default function PayrollDetail() {
                     }
                   }}
                 >
-                  Xóa bảng lương
+                  Xóa
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="text"
+                color="blue-gray"
+                className="normal-case py-1.5 px-2.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                onClick={() => setShowGuide(!showGuide)}
+                title="Xem giải thích quy tắc tính công và hướng dẫn"
+              >
+                {showGuide ? "Ẩn chú thích" : "ℹ️ Chú thích"}
+              </Button>
             </div>
           </div>
-          {canEdit && (
-            <p className="text-xs text-amber-700 mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              {isAdmin
-                ? <>Admin sửa được giờ+phút, công, lương gộp, thưởng… (không sửa <strong>mức lương</strong> — lấy từ hồ sơ NV, có nhãn Tháng/Giờ). Bấm <strong>Lưu</strong> từng dòng. Cột <strong>Chi tiết</strong> xem vào/ra từng ngày.</>
-                : <>Nháp — nhập phụ cấp/ghi chú rồi bấm <strong>Lưu</strong>. Tiền có dấu phẩy hàng nghìn. Xong bấm <strong>Duyệt bảng lương</strong>.</>}
-            </p>
-          )}
-          <p className="text-[11px] text-blue-gray-500 mt-2 leading-snug">
-            <strong>Ngày đi làm</strong> = số ngày lịch có mặt (đi làm là đếm 1, dù chỉ 3h).{" "}
-            <strong>Ngày công</strong> = quy đổi giờ (đủ ~8h mới = 1 công; 3h ≈ 0,4 công). Lương giờ trả theo số giờ; lương tháng trả theo công (chuẩn 26). Bản cũ thiếu cột này → bấm tính lại bảng lương.
-          </p>
-          {(payroll.status === "Approved" || payroll.status === "Paid") && payroll.employeeConfirmDeadline && (
-            <p className="text-[11px] text-amber-800 mt-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 leading-snug">
-              Hạn NV xác nhận phiếu: <strong>{formatPayrollDateTime(payroll.employeeConfirmDeadline)}</strong>
-              {" "}— hết hạn hệ thống tự đánh dấu đúng.
-            </p>
+
+          {(canEdit || showGuide) && (
+            <div className="mt-2.5 pt-2 border-t border-dashed border-blue-gray-200 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
+              {canEdit && (
+                <span className="text-amber-800">
+                  {isAdmin
+                    ? <>💡 Admin: Sửa được giờ+phút, công, lương gộp, thưởng, phụ cấp… Bấm <strong>Lưu</strong> từng dòng. Cột <strong>Chi tiết</strong> xem vào/ra.</>
+                    : <>💡 Nháp: Nhập ghi chú rồi bấm <strong>Lưu</strong>. Xong bấm <strong>Duyệt bảng lương</strong>.</>}
+                </span>
+              )}
+              {showGuide && (
+                <span className="text-blue-gray-600 text-[11px]">
+                  <strong>Ngày đi làm</strong>: số ngày có mặt (đếm 1/ngày) · <strong>Ngày công</strong>: quy đổi (~8h = 1 công) · Lương giờ theo giờ, lương tháng theo công (chuẩn 26).
+                </span>
+              )}
+            </div>
           )}
         </div>
         <CardBody className="p-0">
@@ -729,12 +818,6 @@ export default function PayrollDetail() {
                       <MobileRow label="Mức lương"><RateDisplay d={d} /></MobileRow>
                     </>
                   )}
-                  {canEdit && !isAdmin && (
-                    <MobileField label="Phụ cấp (đ)">
-                      <MoneyInput className="w-full rounded border border-blue-gray-200 px-2 py-1.5 text-sm text-right"
-                        value={e.deliveryAllowance ?? ""} onChange={(v) => setEdit(d.id, "deliveryAllowance", v)} />
-                    </MobileField>
-                  )}
                   <MobileRow label="Ghi chú">
                     <button type="button" className="text-left text-blue-600 text-xs underline" onClick={() => openNoteModal(d)}>
                       {notePreview(e.note ?? d.note)}
@@ -751,9 +834,24 @@ export default function PayrollDetail() {
                       </Button>
                     )}
                   </div>
-                  {!canEdit && Number(d.deliveryAllowance) > 0 && (
-                    <MobileRow label="Phụ cấp">{formatMoney(d.deliveryAllowance)}</MobileRow>
-                  )}
+                  <MobileRow label="Phụ cấp">
+                    <button
+                      type="button"
+                      className="text-right text-blue-600 underline text-xs"
+                      onClick={() => openAllowanceModal(d)}
+                    >
+                      {(() => {
+                        const allowanceAmt = parseEditMoney(e.deliveryAllowance, d.deliveryAllowance);
+                        const rawAllowances = e.allowances ?? d.allowances ?? [];
+                        const delItem = rawAllowances.find((a) => a.code === "DELIVERY");
+                        const trips = delItem?.quantity ?? (allowanceAmt > 0 ? Math.round(allowanceAmt / 8000) : 0);
+                        if (allowanceAmt > 0) {
+                          return `${formatMoney(allowanceAmt)} (${trips} lượt ship)`;
+                        }
+                        return canEdit ? "+ Nhập lượt ship" : "0 đ";
+                      })()}
+                    </button>
+                  </MobileRow>
                   <MobileRow label="Thực nhận"><span className="font-bold">{formatMoney(net)}</span></MobileRow>
                   {(payroll.status === "Approved" || payroll.status === "Paid") && (
                     <MobileRow label="NV xác nhận">
@@ -771,9 +869,9 @@ export default function PayrollDetail() {
             })}
           </MobileListShell>
 
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block overflow-auto max-h-[calc(100vh-215px)] min-h-[380px]">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-blue-600 shadow-sm">
               <tr className="bg-blue-600 text-white">
                 <th className="px-4 py-2.5 text-center w-10">STT</th>
                 <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("employeeName")}>Nhân viên <SortIcon active={sortKey === "employeeName"} dir={sortDir} /></th>
@@ -855,13 +953,34 @@ export default function PayrollDetail() {
                         <span className="text-green-600">{d.bonus > 0 ? `+${formatAmount(d.bonus)}` : "—"}</span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {canEdit ? (
-                        <MoneyInput className="w-28 text-right rounded border border-blue-gray-200 px-2 py-1 text-sm"
-                          value={e.deliveryAllowance ?? ""} onChange={(v) => setEdit(d.id, "deliveryAllowance", v)} />
-                      ) : (
-                        <span className="text-amber-600">{d.deliveryAllowance > 0 ? `+${formatAmount(d.deliveryAllowance)}` : "—"}</span>
-                      )}
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                      {(() => {
+                        const allowanceAmt = parseEditMoney(e.deliveryAllowance, d.deliveryAllowance);
+                        const rawAllowances = e.allowances ?? d.allowances ?? [];
+                        const delItem = rawAllowances.find((a) => a.code === "DELIVERY");
+                        const trips = delItem?.quantity ?? (allowanceAmt > 0 ? Math.round(allowanceAmt / 8000) : 0);
+                        const otherCount = rawAllowances.filter((a) => a.code !== "DELIVERY").length;
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => openAllowanceModal(d)}
+                            className="group text-right w-full block hover:opacity-80 transition-opacity"
+                            title="Bấm để xem và sửa chi tiết phụ cấp"
+                          >
+                            <span className={`font-semibold block ${allowanceAmt > 0 ? "text-amber-700" : "text-gray-400"}`}>
+                              {allowanceAmt > 0 ? `+${formatAmount(allowanceAmt)}` : "—"}
+                            </span>
+                            <span className="text-[10px] text-blue-600 underline block group-hover:text-blue-800">
+                              {trips > 0
+                                ? `${trips} lượt ship${otherCount > 0 ? ` +${otherCount}` : ""}`
+                                : canEdit
+                                ? "+ Nhập ship"
+                                : "Chi tiết"}
+                            </span>
+                          </button>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-2.5 max-w-[160px]">
                       <button
@@ -1052,6 +1171,15 @@ export default function PayrollDetail() {
         payrollId={id}
         detailId={dayHistory?.detailId}
         onClose={() => setDayHistory(null)}
+      />
+
+      <PayrollAllowanceModal
+        open={!!allowanceModal}
+        detail={allowanceModal}
+        canEdit={canEdit}
+        isAdmin={isAdmin}
+        onClose={() => setAllowanceModal(null)}
+        onSave={(payload) => handleSaveAllowances(allowanceModal.detailId, payload)}
       />
     </div>
   );

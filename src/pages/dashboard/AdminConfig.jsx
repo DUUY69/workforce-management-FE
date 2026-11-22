@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardBody, Typography, Button, Chip, Input, Switch } from "@material-tailwind/react";
 import { PlusIcon, PencilIcon, TrashIcon, CalendarDaysIcon, ListBulletIcon, ArrowRightIcon, SparklesIcon } from "@heroicons/react/24/solid";
 import api from "@/api";
@@ -620,8 +620,21 @@ export default function AdminConfig() {
 
   // ── Holiday CRUD ─────────────────────────────────────────────────────────────
   const saveHoliday = async (form) => {
+    if (!form.date) {
+      alert("Vui lòng chọn ngày lễ.");
+      return;
+    }
+    if (!form.name || !form.name.trim()) {
+      alert("Vui lòng nhập tên ngày lễ.");
+      return;
+    }
+    const mult = Number(form.multiplier);
+    if (isNaN(mult) || mult <= 0) {
+      alert("Hệ số lương phải lớn hơn 0.");
+      return;
+    }
     try {
-      const payload = { date: form.date, name: form.name, multiplier: Number(form.multiplier), isActive: form.isActive };
+      const payload = { date: form.date, name: form.name.trim(), multiplier: mult, isActive: form.isActive };
       if (form.id) await api.put(`/config/holidays/${form.id}`, payload);
       else await api.post("/config/holidays", payload);
       setHolidayForm(null);

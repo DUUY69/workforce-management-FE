@@ -23,6 +23,7 @@ import StoreAttendanceAlerts from "@/components/StoreAttendanceAlerts";
 import OperationsDashboard from "@/components/OperationsDashboard";
 import { mergeAdjacentShifts, attendanceForShiftBlock } from "@/utils/mergeAdjacentShifts";
 import { getMondayOfWeek, getWeekDates, addDays } from "@/utils/scheduleSlots";
+import QrAttendanceScannerModal from "@/components/QrAttendanceScannerModal";
 
 function needsPayslipConfirm(p) {
   const status = p?.status;
@@ -135,83 +136,82 @@ function WeekScheduleCard({
         <p className="text-xs text-blue-gray-400 text-center mb-2 -mt-1">Vuốt trái/phải để đổi tuần</p>
 
         <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        {loading ? (
-          <p className="text-sm text-gray-400 py-3 text-center">Đang tải...</p>
-        ) : !hasAny ? (
-          <div className="rounded-xl border border-dashed border-blue-gray-200 bg-blue-gray-50/50 p-4 text-center space-y-2">
-            <p className="text-sm text-blue-gray-500">Tuần này chưa có ca nào được duyệt</p>
-            <Button size="sm" variant="outlined" color="blue" onClick={() => navigate("/dashboard/shift-registrations")}>
-              Đăng ký ca ngay
-            </Button>
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {weekDays.map((dateStr) => {
-              const rawDay = byDay[dateStr] || [];
-              const dayCas = mergeAdjacentShifts(sortShiftsChronologically(rawDay));
-              const isToday = dateStr === today;
-              const isPast = dateStr < today;
-              const dateLabel = new Date(`${dateStr}T00:00:00`).toLocaleDateString("vi-VN", {
-                weekday: "short",
-                day: "2-digit",
-                month: "2-digit",
-              });
+          {loading ? (
+            <p className="text-sm text-gray-400 py-3 text-center">Đang tải...</p>
+          ) : !hasAny ? (
+            <div className="rounded-xl border border-dashed border-blue-gray-200 bg-blue-gray-50/50 p-4 text-center space-y-2">
+              <p className="text-sm text-blue-gray-500">Tuần này chưa có ca nào được duyệt</p>
+              <Button size="sm" variant="outlined" color="blue" onClick={() => navigate("/dashboard/shift-registrations")}>
+                Đăng ký ca ngay
+              </Button>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {weekDays.map((dateStr) => {
+                const rawDay = byDay[dateStr] || [];
+                const dayCas = mergeAdjacentShifts(sortShiftsChronologically(rawDay));
+                const isToday = dateStr === today;
+                const isPast = dateStr < today;
+                const dateLabel = new Date(`${dateStr}T00:00:00`).toLocaleDateString("vi-VN", {
+                  weekday: "short",
+                  day: "2-digit",
+                  month: "2-digit",
+                });
 
-              if (dayCas.length === 0) return null;
+                if (dayCas.length === 0) return null;
 
-              return (
-                <li
-                  key={dateStr}
-                  className={`rounded-xl border px-3 py-2.5 ${
-                    isToday
-                      ? "border-blue-500 bg-blue-50 shadow-sm"
-                      : isPast
-                      ? "border-blue-gray-100 bg-blue-gray-50/40 opacity-70"
-                      : "border-blue-gray-100 bg-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-blue-700" : "text-blue-gray-500"}`}>
-                      {dateLabel}
-                    </span>
-                    {isToday && (
-                      <span className="text-xs bg-blue-600 text-white rounded-full px-2 py-0.5 font-medium">Hôm nay</span>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    {dayCas.map((s) => {
-                      const regIds = new Set(s.registrationIds || [s.id]);
-                      const blockRegs = rawDay.filter((r) => regIds.has(r.id));
-                      const blockStatus = blockRegs.some((r) => r.status === "Pending")
-                        ? "Pending"
-                        : (blockRegs[0]?.status || s.status);
-                      const blockAtt = attendanceForShiftBlock(attendances, s);
-                      const status = weekBlockStatus(blockStatus, blockAtt);
-                      return (
-                      <div key={`${dateStr}-${s.storeId}-${s.startTime}-${s.endTime}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                        <span className="flex items-center gap-1 font-semibold text-blue-gray-900">
-                          <ClockIcon className="w-3.5 h-3.5 text-blue-500" />
-                          {formatShiftTime(s)}
-                        </span>
-                        <span className="flex items-center gap-1 text-blue-gray-600 min-w-0">
-                          <BuildingStorefrontIcon className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                          <span className="truncate">{s.storeName}</span>
-                        </span>
-                        <Chip
-                          size="sm"
-                          color={status.color}
-                          value={status.label}
-                          className="normal-case ml-auto shrink-0"
-                        />
-                      </div>
-                      );
-                    })}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                return (
+                  <li
+                    key={dateStr}
+                    className={`rounded-xl border px-3 py-2.5 ${isToday
+                        ? "border-blue-500 bg-blue-50 shadow-sm"
+                        : isPast
+                          ? "border-blue-gray-100 bg-blue-gray-50/40 opacity-70"
+                          : "border-blue-gray-100 bg-white"
+                      }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-xs font-bold uppercase tracking-wide ${isToday ? "text-blue-700" : "text-blue-gray-500"}`}>
+                        {dateLabel}
+                      </span>
+                      {isToday && (
+                        <span className="text-xs bg-blue-600 text-white rounded-full px-2 py-0.5 font-medium">Hôm nay</span>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      {dayCas.map((s) => {
+                        const regIds = new Set(s.registrationIds || [s.id]);
+                        const blockRegs = rawDay.filter((r) => regIds.has(r.id));
+                        const blockStatus = blockRegs.some((r) => r.status === "Pending")
+                          ? "Pending"
+                          : (blockRegs[0]?.status || s.status);
+                        const blockAtt = attendanceForShiftBlock(attendances, s);
+                        const status = weekBlockStatus(blockStatus, blockAtt);
+                        return (
+                          <div key={`${dateStr}-${s.storeId}-${s.startTime}-${s.endTime}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                            <span className="flex items-center gap-1 font-semibold text-blue-gray-900">
+                              <ClockIcon className="w-3.5 h-3.5 text-blue-500" />
+                              {formatShiftTime(s)}
+                            </span>
+                            <span className="flex items-center gap-1 text-blue-gray-600 min-w-0">
+                              <BuildingStorefrontIcon className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                              <span className="truncate">{s.storeName}</span>
+                            </span>
+                            <Chip
+                              size="sm"
+                              color={status.color}
+                              value={status.label}
+                              className="normal-case ml-auto shrink-0"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </CardBody>
     </Card>
@@ -301,6 +301,8 @@ export default function Home() {
   const [weekLoading, setWeekLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [punching, setPunching] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [activePunchShift, setActivePunchShift] = useState(null);
 
   const weekDays = useMemo(() => getWeekDates(weekMonday), [weekMonday]);
   const isCurrentWeek = weekMonday === getMondayOfWeek(new Date());
@@ -322,7 +324,7 @@ export default function Home() {
           employees: empRes.data.data?.length || 0,
           stores: storeList.length,
         });
-      } catch {}
+      } catch { }
     };
     load();
   }, [employeeView, isAdmin]);
@@ -446,6 +448,39 @@ export default function Home() {
     : (myToday?.attendance ? [myToday.attendance] : []);
   const att = dayAttendances.find((a) => a.reviewStatus === "Open") || myToday?.attendance;
 
+  const refreshTodayAndWeek = async () => {
+    const weekFrom = weekDays[0];
+    const weekTo = weekDays[6];
+    const weekAttParams = new URLSearchParams({ dateFrom: weekFrom, dateTo: weekTo });
+    const [refreshRes, weekAttRes] = await Promise.all([
+      api.get(`/attendance/my-today?workDate=${today}`),
+      api.get(`/attendance?${weekAttParams}`).catch(() => null),
+    ]);
+    setMyToday(refreshRes.data.data || null);
+    if (weekAttRes?.data?.data) {
+      setWeekAttendances(weekAttRes.data.data);
+    }
+  };
+
+  const handleQrPunch = async (qrToken) => {
+    setQrModalOpen(false);
+    setPunching(true);
+    try {
+      const res = await api.post("/attendance/qr-punch", {
+        qrToken,
+        shiftRegistrationId: activePunchShift?.id,
+        workDate: today,
+        action: activePunchShift?.action || "auto",
+      });
+      alert(res.data?.message || "Chấm công thành công!");
+      await refreshTodayAndWeek();
+    } catch (e) {
+      alert(e?.response?.data?.message || "Lỗi khi chấm công bằng mã QR.");
+    } finally {
+      setPunching(false);
+    }
+  };
+
   const handleCheckIn = async (shiftRegistrationId) => {
     if (!shiftRegistrationId) return;
     setPunching(true);
@@ -454,9 +489,7 @@ export default function Home() {
         shiftRegistrationId,
         workDate: today,
       });
-      // reload my-today
-      const res = await api.get(`/attendance/my-today?workDate=${today}`);
-      setMyToday(res.data.data || null);
+      await refreshTodayAndWeek();
     } catch (e) {
       alert(e?.response?.data?.message || "Lỗi check-in");
     } finally {
@@ -471,8 +504,7 @@ export default function Home() {
     setPunching(true);
     try {
       await api.post(`/attendance/${targetId}/check-out`);
-      const res = await api.get(`/attendance/my-today?workDate=${today}`);
-      setMyToday(res.data.data || null);
+      await refreshTodayAndWeek();
     } catch (e) {
       alert(e?.response?.data?.message || "Lỗi check-out");
     } finally {
@@ -566,7 +598,7 @@ export default function Home() {
           <Typography variant="h6" color="blue-gray" className="text-base flex items-center gap-2 mb-3">
             <ClipboardDocumentCheckIcon className="w-5 h-5 text-orange-500" />
             Chấm công hôm nay
-                </Typography>
+          </Typography>
 
           {loading ? (
             <p className="text-sm text-gray-400 text-center py-2">Đang tải...</p>
@@ -589,32 +621,58 @@ export default function Home() {
                         <BuildingStorefrontIcon className="w-4 h-4 text-teal-500" />
                         {block.storeName}
                       </span>
-              </div>
+                    </div>
                     {!blockAtt && (
-                      <Button
-                        color="green"
-                        size="lg"
-                        className="w-full normal-case text-base"
-                        disabled={punching}
-                        onClick={() => handleCheckIn(block.id)}
-                      >
-                        {punching ? "Đang xử lý..." : "▶ Bắt đầu làm"}
-              </Button>
+                      <div className="space-y-1.5">
+                        <Button
+                          color="green"
+                          size="lg"
+                          className="w-full normal-case text-base flex items-center justify-center gap-2 shadow-sm"
+                          disabled={punching}
+                          onClick={() => {
+                            setActivePunchShift({ ...block, action: "check-in" });
+                            setQrModalOpen(true);
+                          }}
+                        >
+                          <span className="text-xl">📷</span> Quét QR tại quán để Vào ca
+                        </Button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleCheckIn(block.id)}
+                            className="text-[11px] text-gray-500 hover:text-blue-600 block mx-auto underline"
+                          >
+                            (Admin: Vào ca thủ công)
+                          </button>
+                        )}
+                      </div>
                     )}
                     {blockAtt?.reviewStatus === "Open" && (
                       <div className="space-y-2">
                         <div className="rounded-xl bg-green-50 border border-green-200 px-3 py-2 text-green-800 font-medium">
                           ✓ Đang làm · Vào lúc <strong>{blockAtt.actualCheckIn}</strong>
-              </div>
+                        </div>
                         <Button
                           color="blue"
                           size="lg"
-                          className="w-full normal-case text-base"
+                          className="w-full normal-case text-base flex items-center justify-center gap-2 shadow-sm"
                           disabled={punching}
-                          onClick={() => handleCheckOut(blockAtt.id)}
+                          onClick={() => {
+                            setActivePunchShift({ ...block, action: "check-out", attendanceId: blockAtt.id });
+                            setQrModalOpen(true);
+                          }}
                         >
-                          {punching ? "Đang xử lý..." : "■ Kết thúc ca"}
-              </Button>
+                          <span className="text-xl">📷</span> Quét QR tại quán để Kết thúc ca
+                        </Button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleCheckOut(blockAtt.id)}
+                            className="text-[11px] text-gray-500 hover:text-blue-600 block mx-auto underline"
+                          >
+                            (Admin: Kết thúc thủ công)
+                          </button>
+                        )}
                       </div>
                     )}
                     {blockAtt?.reviewStatus === "PendingReview" && (
@@ -628,13 +686,13 @@ export default function Home() {
                         ✓ Đã duyệt công · {blockAtt.checkIn} – {blockAtt.checkOut} · <strong>{Number(blockAtt.workedHours).toFixed(1)}h</strong>
                       </div>
                     )}
-              </div>
+                  </div>
                 );
               })}
-      </div>
-            )}
-          </CardBody>
-        </Card>
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       {/* Lịch làm tuần này */}
       <WeekScheduleCard
@@ -654,6 +712,13 @@ export default function Home() {
         monthWorkedHours={monthWorkedHours}
         monthEstimate={monthEstimate}
         loading={loading}
+      />
+
+      <QrAttendanceScannerModal
+        open={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        onScanSuccess={handleQrPunch}
+        shiftInfo={activePunchShift}
       />
     </div>
   );

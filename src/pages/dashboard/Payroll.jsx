@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSortableTable } from "@/hooks/useSortableTable";
 import SortIcon from "@/components/SortIcon";
 import { useNavigate } from "react-router-dom";
@@ -12,7 +12,8 @@ import { PayslipLines } from "@/components/PayslipLines";
 import { useUrlFilters } from "@/utils/urlFilters";
 import { formatPayrollDateTime } from "@/utils/dates";
 import { formatMoney, formatHoursMinutes } from "@/utils/formatMoney";
-import { exportPayrollListExcel } from "@/utils/exportPayrollExcel";
+import { fetchEmployeePositionMap } from "@/utils/employeeHelpers";
+import { exportPayrollListExcel, exportPayrollBulkExcel, assertValidPayrollForExport } from "@/utils/exportPayrollExcel";
 
 const nowInit = new Date();
 const CURRENT_MONTH = String(nowInit.getMonth() + 1);
@@ -35,6 +36,8 @@ const confirmLabels = {
   AutoConfirmed: "Tự xác nhận",
   None: "—",
 };
+
+const BULK_EXPORT_CONCURRENCY = 4;
 
 const sortPayrolls = (list) =>
   [...list].sort((a, b) => b.year - a.year || b.month - a.month || b.id - a.id);
@@ -60,6 +63,10 @@ export default function Payroll() {
   const [logPayroll, setLogPayroll] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [exporting, setExporting] = useState(false);
+  const exportingRef = useRef(false);
+  const exportAbortRef = useRef(null);
 
   const { values, setFilter, setFilters, clearFilters, searchString } = useUrlFilters(PAYROLL_FILTER_DEFAULTS, {
     storageKey: "filters:/dashboard/payroll",
@@ -74,6 +81,7 @@ export default function Payroll() {
   const load = useCallback(async () => {
     setLoading(true);
     setEmptyHint(null);
+    setSelectedIds((prev) => (prev.size ? new Set() : prev));
     try {
       if (employeeView) {
         const payRes = await api.get("/payrolls/my");
@@ -137,6 +145,32 @@ export default function Payroll() {
     [payrolls]
   );
   const { sorted, sortKey, sortDir, handleSort } = useSortableTable(payrollsWithPeriod);
+
+  const selectedCount = useMemo(
+    () => (sorted || []).filter((p) => selectedIds.has(p.id)).length,
+    [sorted, selectedIds]
+  );
+  const allSelected = !loading && sorted.length > 0 && selectedCount === sorted.length;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  const toggleSelected = (id) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleSelectAll = () =>
+    setSelectedIds(allSelected ? new Set() : new Set(sorted.map((p) => p.id)));
+
+  // Mất quyền quản lý/đổi chế độ nhân viên: xoá lựa chọn và huỷ lượt xuất đang chạy
+  useEffect(() => {
+    if (!canManage) {
+      setSelectedIds((prev) => (prev.size ? new Set() : prev));
+      exportAbortRef.current?.abort();
+    }
+  }, [canManage]);
+  useEffect(() => () => exportAbortRef.current?.abort(), []);
 
   const listTotals = useMemo(() => {
     const rows = sorted || [];
@@ -255,6 +289,72 @@ export default function Payroll() {
     }
   };
 
+  const handleExportDetail = async () => {
+    if (!canManage || loading || exportingRef.current) return;
+    const targets = sorted.filter((p) => selectedIds.has(p.id));
+    if (!targets.length) {
+      alert("Chọn ít nhất một bảng lương để xuất chi tiết");
+      return;
+    }
+    const filterLabel = [
+      periodLabel,
+      filter.storeId ? stores.find((st) => String(st.id) === String(filter.storeId))?.name || `CH ID ${filter.storeId}` : "Tất cả CH",
+      filter.status ? statusLabels[filter.status] || filter.status : "Mọi TT",
+    ].join(" · ");
+    const ctrl = new AbortController();
+    exportAbortRef.current = ctrl;
+    exportingRef.current = true;
+    setExporting(true);
+    try {
+      const results = new Array(targets.length);
+      let next = 0;
+      const worker = async () => {
+        while (!ctrl.signal.aborted) {
+          const i = next++;
+          if (i >= targets.length) return;
+          const t = targets[i];
+          const ref = `${t.storeName || "Cửa hàng"} — T.${t.month}/${t.year} (ID ${t.id})`;
+          let data;
+          try {
+            const res = await api.get(`/payrolls/${t.id}`, { signal: ctrl.signal });
+            data = res?.data?.data;
+          } catch (e) {
+            if (ctrl.signal.aborted) return;
+            const status = e?.response?.status;
+            throw new Error(`${ref}: ${e?.response?.data?.message || (status ? `lỗi ${status}` : "lỗi mạng")}`);
+          }
+          if (ctrl.signal.aborted) return;
+          assertValidPayrollForExport(data, t.id);
+          results[i] = data;
+        }
+      };
+      // Chức vụ: một lượt tải danh sách hồ sơ (không gọi theo từng dòng), lỗi thì dừng toàn bộ
+      const positionsPromise = fetchEmployeePositionMap(api, { signal: ctrl.signal }).catch((e) => {
+        if (ctrl.signal.aborted) return null;
+        const status = e?.response?.status;
+        throw new Error(`Không tải được hồ sơ nhân viên (chức vụ): ${e?.response?.data?.message || e?.message || (status ? `lỗi ${status}` : "lỗi mạng")}`);
+      });
+      let positions;
+      try {
+        [, positions] = await Promise.all([
+          Promise.all(Array.from({ length: Math.min(BULK_EXPORT_CONCURRENCY, targets.length) }, worker)),
+          positionsPromise,
+        ]);
+      } catch (err) {
+        ctrl.abort();
+        throw err;
+      }
+      if (ctrl.signal.aborted) return;
+      exportPayrollBulkExcel(results, { filterLabel, positions });
+    } catch (err) {
+      alert(`Không xuất được Excel chi tiết, chưa tạo file nào.\n${err?.message || ""}`.trim());
+    } finally {
+      if (exportAbortRef.current === ctrl) exportAbortRef.current = null;
+      exportingRef.current = false;
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="mt-4">
       <Card className="border border-blue-gray-100">
@@ -286,9 +386,22 @@ export default function Payroll() {
                   <ArrowDownTrayIcon className="w-4 h-4" /> Xuất Excel tổng
                 </Button>
               )}
+              {canManage && payrolls.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outlined"
+                  className="flex items-center gap-1 justify-center w-full sm:w-auto normal-case"
+                  disabled={loading || exporting || selectedCount === 0}
+                  onClick={handleExportDetail}
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  {exporting ? "Đang xuất..." : selectedCount ? `Xuất Excel chi tiết (${selectedCount})` : "Xuất Excel chi tiết"}
+                </Button>
+              )}
               {canManage && (
                 <Button size="sm" className="flex items-center gap-1 justify-center w-full sm:w-auto"
-                  onClick={() => setShowGenerate(!showGenerate)}>
+                  disabled={exporting}
+                  data-guide="payroll-open" onClick={() => setShowGenerate(!showGenerate)}>
                   <PlusIcon className="w-4 h-4" /> Tính lương mới
                 </Button>
               )}
@@ -307,7 +420,7 @@ export default function Payroll() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-blue-gray-600 font-medium mb-1 block">Cửa hàng *</label>
-                  <select value={genForm.storeId} onChange={(e) => setGenForm({ ...genForm, storeId: e.target.value })}
+                  <select data-guide="payroll-store" value={genForm.storeId} onChange={(e) => setGenForm({ ...genForm, storeId: e.target.value })}
                     className="w-full rounded-lg border border-blue-gray-200 px-3 py-2.5 text-sm bg-white">
                     <option value="">— Chọn —</option>
                     {stores.filter((s) => s.isActive).map((s) => (
@@ -317,21 +430,21 @@ export default function Payroll() {
                 </div>
                 <div>
                   <label className="text-xs text-blue-gray-600 font-medium mb-1 block">Tháng *</label>
-                  <select value={genForm.month} onChange={(e) => setGenForm({ ...genForm, month: e.target.value })}
+                  <select data-guide="payroll-month" value={genForm.month} onChange={(e) => setGenForm({ ...genForm, month: e.target.value })}
                     className="w-full rounded-lg border border-blue-gray-200 px-3 py-2.5 text-sm bg-white">
                     {monthOptions.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs text-blue-gray-600 font-medium mb-1 block">Năm *</label>
-                  <select value={genForm.year} onChange={(e) => setGenForm({ ...genForm, year: e.target.value })}
+                  <select data-guide="payroll-year" value={genForm.year} onChange={(e) => setGenForm({ ...genForm, year: e.target.value })}
                     className="w-full rounded-lg border border-blue-gray-200 px-3 py-2.5 text-sm bg-white">
                     {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleGenerate} disabled={generating}>
+                <Button size="sm" data-guide="payroll-submit" onClick={handleGenerate} disabled={generating || exporting}>
                   {generating ? "Đang tính..." : "Tính lương"}
                 </Button>
                 <Button size="sm" variant="outlined" onClick={() => setShowGenerate(false)}>Hủy</Button>
@@ -341,33 +454,33 @@ export default function Payroll() {
 
           {canManage && (
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-              <select value={filter.storeId} onChange={(e) => setFilter("storeId", e.target.value)}
+              <select value={filter.storeId} onChange={(e) => setFilter("storeId", e.target.value)} disabled={exporting}
                 className="rounded-lg border border-blue-gray-200 px-2 py-2 text-sm bg-white col-span-2 sm:col-span-1">
                 <option value="">Tất cả CH</option>
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-              <select value={filter.month} onChange={(e) => setFilter("month", e.target.value)}
+              <select value={filter.month} onChange={(e) => setFilter("month", e.target.value)} disabled={exporting}
                 className="rounded-lg border border-blue-gray-200 px-2 py-2 text-sm bg-white">
                 <option value={ALL}>Tất cả tháng</option>
                 {monthOptions.map((m) => <option key={m} value={m}>T.{m}</option>)}
               </select>
-              <select value={filter.year} onChange={(e) => setFilter("year", e.target.value)}
+              <select value={filter.year} onChange={(e) => setFilter("year", e.target.value)} disabled={exporting}
                 className="rounded-lg border border-blue-gray-200 px-2 py-2 text-sm bg-white">
                 <option value={ALL}>Tất cả năm</option>
                 {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
-              <select value={filter.status} onChange={(e) => setFilter("status", e.target.value)}
+              <select value={filter.status} onChange={(e) => setFilter("status", e.target.value)} disabled={exporting}
                 className="rounded-lg border border-blue-gray-200 px-2 py-2 text-sm bg-white">
                 <option value="">Mọi TT</option>
                 <option value="Draft">Nháp</option>
                 <option value="Approved">Đã duyệt</option>
                 <option value="Paid">Đã trả</option>
               </select>
-              <button type="button" onClick={goCurrentPeriod}
+              <button type="button" onClick={goCurrentPeriod} disabled={exporting}
                 className="text-xs text-blue-800 font-semibold py-2 px-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100">
                 Tháng này
               </button>
-              <button type="button" onClick={() => clearFilters()}
+              <button type="button" onClick={() => clearFilters()} disabled={exporting}
                 className="text-xs text-blue-600 font-medium py-2 hover:underline">
                 Về mặc định
               </button>
@@ -376,17 +489,17 @@ export default function Payroll() {
 
           {employeeView && (
             <div className="flex flex-wrap gap-2 items-center">
-              <select value={filter.month} onChange={(e) => setFilter("month", e.target.value)}
+              <select value={filter.month} onChange={(e) => setFilter("month", e.target.value)} disabled={exporting}
                 className="rounded-lg border border-blue-gray-200 px-2 py-2 text-sm bg-white">
                 <option value={ALL}>Tất cả tháng</option>
                 {monthOptions.map((m) => <option key={m} value={m}>T.{m}</option>)}
               </select>
-              <select value={filter.year} onChange={(e) => setFilter("year", e.target.value)}
+              <select value={filter.year} onChange={(e) => setFilter("year", e.target.value)} disabled={exporting}
                 className="rounded-lg border border-blue-gray-200 px-2 py-2 text-sm bg-white">
                 <option value={ALL}>Tất cả năm</option>
                 {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
-              <button type="button" onClick={goCurrentPeriod}
+              <button type="button" onClick={goCurrentPeriod} disabled={exporting}
                 className="text-xs text-blue-800 font-semibold py-2 px-2 rounded-lg border border-blue-200 bg-blue-50">
                 Tháng này
               </button>
@@ -407,6 +520,19 @@ export default function Payroll() {
             </div>
           )}
 
+          {canManage && !loading && payrolls.length > 0 && (
+            <label className="md:hidden flex items-center gap-2 px-4 py-2 text-sm text-blue-gray-700 border-b">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                disabled={exporting}
+                onChange={toggleSelectAll}
+              />
+              Chọn tất cả ({selectedCount}/{sorted.length})
+            </label>
+          )}
+
           <MobileListShell
             loading={loading}
             empty={!loading && payrolls.length === 0}
@@ -414,7 +540,20 @@ export default function Payroll() {
             count={payrolls.length}
           >
             {payrolls.map((p) => (
-              <MobileCard key={p.id} onClick={() => openDetail(p)}>
+              <div key={p.id}>
+              {canManage && (
+                <label className="flex items-center gap-2 px-4 pt-3 text-xs text-blue-gray-700" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(p.id)}
+                    disabled={exporting}
+                    onChange={() => toggleSelected(p.id)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  Chọn
+                </label>
+              )}
+              <MobileCard onClick={() => openDetail(p)}>
                 <div className="flex justify-between items-start gap-2">
                   <Typography variant="small" className="font-semibold text-blue-gray-900">
                     {p.storeName || "Cửa hàng"} — T.{p.month}/{p.year}
@@ -480,7 +619,7 @@ export default function Payroll() {
                       <button
                         type="button"
                         className="text-xs text-red-600 font-medium hover:underline disabled:opacity-50"
-                        disabled={deletingId === p.id}
+                        disabled={deletingId === p.id || exporting}
                         onClick={(e) => handleDelete(p, e)}
                       >
                         {deletingId === p.id ? "Đang xóa..." : "Xóa"}
@@ -490,13 +629,26 @@ export default function Payroll() {
                 )}
                 <Typography variant="small" color="gray" className="text-xs mt-1">Chạm để xem chi tiết</Typography>
               </MobileCard>
+              </div>
             ))}
           </MobileListShell>
 
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block overflow-auto max-h-[calc(100vh-280px)] min-h-[350px]">
             <table className="w-full text-sm min-w-[980px]">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-blue-600 shadow-sm">
                 <tr className="bg-blue-600 text-white">
+                  {canManage && (
+                    <th className="px-3 py-2.5 text-center w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Chọn tất cả"
+                        checked={allSelected}
+                        ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                        disabled={exporting || loading || sorted.length === 0}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-2.5 text-center w-10">STT</th>
                   <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("storeName")}>Cửa hàng <SortIcon active={sortKey === "storeName"} dir={sortDir} /></th>
                   <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("period")}>Kỳ <SortIcon active={sortKey === "period"} dir={sortDir} /></th>
@@ -525,13 +677,24 @@ export default function Payroll() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={canManage ? 12 : (employeeView ? 6 : 10)} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
+                  <tr><td colSpan={canManage ? 13 : (employeeView ? 6 : 10)} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
                 ) : payrolls.length === 0 ? (
-                  <tr><td colSpan={canManage ? 12 : (employeeView ? 6 : 10)} className="py-10 text-center text-gray-400">
+                  <tr><td colSpan={canManage ? 13 : (employeeView ? 6 : 10)} className="py-10 text-center text-gray-400">
                     {employeeView ? "Chưa có phiếu lương đã duyệt/đã trả" : "Chưa có dữ liệu"}
                   </td></tr>
                 ) : sorted.map((p, i) => (
                   <tr key={p.id} className={i % 2 === 0 ? "bg-white" : "bg-blue-50/30"}>
+                    {canManage && (
+                      <td className="px-3 py-2.5 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label={`Chọn bảng ${p.id}`}
+                          checked={selectedIds.has(p.id)}
+                          disabled={exporting}
+                          onChange={() => toggleSelected(p.id)}
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
                     <td className="px-4 py-2.5 font-medium">{p.storeName}</td>
                     <td className="px-4 py-2.5 text-center">T.{p.month}/{p.year}</td>
@@ -596,7 +759,7 @@ export default function Payroll() {
                         {canDeletePayroll(p) && (
                           <button
                             type="button"
-                            disabled={deletingId === p.id}
+                            disabled={deletingId === p.id || exporting}
                             onClick={(e) => handleDelete(p, e)}
                             className="text-xs text-red-600 hover:underline disabled:opacity-50"
                           >
@@ -609,7 +772,7 @@ export default function Payroll() {
                 ))}
                 {!loading && !employeeView && sorted.length > 0 && (
                   <tr className="bg-blue-gray-50 border-t-2 border-blue-200 font-semibold">
-                    <td className="px-4 py-3 text-center text-xs text-blue-gray-500" colSpan={3}>
+                    <td className="px-4 py-3 text-center text-xs text-blue-gray-500" colSpan={canManage ? 4 : 3}>
                       TỔNG ({listTotals.count} bảng
                       {listTotals.employees ? ` · ${listTotals.employees} NV` : ""})
                     </td>

@@ -63,9 +63,6 @@ export default function Login() {
             <Button type="submit" fullWidth disabled={loading} className="mt-2">
               {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
-            <Typography color="gray" className="text-xs text-center mt-2">
-              Local: <strong>admin</strong> / <strong>Admin@123</strong>
-            </Typography>
           </form>
         </CardBody>
       </Card>

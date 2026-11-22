@@ -4,6 +4,7 @@ import { Typography, IconButton } from "@material-tailwind/react";
 import { Bars3Icon, XMarkIcon, ArrowRightOnRectangleIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/context/AuthContext";
 import { dashboardRoutesConfig, getRoutesForRole } from "@/routes";
+import AdminWalkthrough from "@/components/AdminWalkthrough";
 import AssistantPanel from "@/widgets/assistant-panel";
 import { assistantPanelMarginClass, useAssistantPanel } from "@/widgets/assistant-panel-state";
 
@@ -139,6 +140,7 @@ export default function Dashboard() {
               <Route key={path} path={path} element={element} />
             ))}
           </Routes>
+          <AdminWalkthrough />
         </main>
       </div>
 

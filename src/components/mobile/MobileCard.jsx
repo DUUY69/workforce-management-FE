@@ -9,9 +9,9 @@ export function MobileRow({ label, children, className = "" }) {
   );
 }
 
-export function MobileField({ label, required, children, className = "", prominent = false }) {
+export function MobileField({ label, required, children, className = "", prominent = false, guide }) {
   return (
-    <div className={className}>
+    <div className={className} data-guide={guide}>
       <label
         className={
           prominent

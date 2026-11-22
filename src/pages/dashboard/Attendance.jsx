@@ -12,6 +12,7 @@ import AttendanceReviewModal from "@/components/AttendanceReviewModal";
 import AttendanceManualModal from "@/components/AttendanceManualModal";
 import FaceRecognitionHistoryModal from "@/components/FaceRecognitionHistoryModal";
 import AttendanceManagerDayTable from "@/components/AttendanceManagerDayTable";
+import QrAttendanceScannerModal from "@/components/QrAttendanceScannerModal";
 import { useUrlFilters } from "@/utils/urlFilters";
 import { formatHoursMinutes } from "@/utils/formatMoney";
 
@@ -54,6 +55,8 @@ export default function Attendance() {
   const [eodLoading, setEodLoading] = useState(false);
   const [manualRow, setManualRow] = useState(null);
   const [faceHistoryEmp, setFaceHistoryEmp] = useState(null);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [activePunchShift, setActivePunchShift] = useState(null);
 
   const monthRange = (isoDate) => {
     const [y, m] = isoDate.split("-").map(Number);
@@ -95,7 +98,7 @@ export default function Attendance() {
       setPendingReview(results[2].data.data || []);
       setDayBoard(results[3].data.data || []);
       setMyToday(results[4].data.data || null);
-    } catch {} finally { if (!silent) setLoading(false); }
+    } catch { } finally { if (!silent) setLoading(false); }
   }, [filterDate, filterStore, viewMonth, canViewOps, isAdmin, flaggedOnly, showEmployeePunch, canOperate]);
 
   useEffect(() => { load(); }, [load]);
@@ -117,6 +120,25 @@ export default function Attendance() {
     const idx = pendingReview.findIndex((r) => r.id === rec.id);
     setReviewIndex(idx >= 0 ? idx : 0);
     setReviewModalOpen(true);
+  };
+
+  const handleQrPunch = async (qrToken) => {
+    setQrModalOpen(false);
+    setPunching(true);
+    try {
+      const res = await api.post("/attendance/qr-punch", {
+        qrToken,
+        shiftRegistrationId: activePunchShift?.id,
+        workDate: filterDate,
+        action: activePunchShift?.action || "auto",
+      });
+      alert(res.data?.message || "Chấm công thành công!");
+      load();
+    } catch (e) {
+      alert(e?.response?.data?.message || "Lỗi khi chấm công bằng mã QR.");
+    } finally {
+      setPunching(false);
+    }
   };
 
   const handleCheckIn = async (shiftRegistrationId) => {
@@ -242,7 +264,7 @@ export default function Attendance() {
             <div className="px-4 py-4 border-b bg-gradient-to-r from-green-50 to-white">
               <Typography variant="small" className="font-semibold text-blue-gray-800 mb-1">Tự chấm công hôm nay</Typography>
               <Typography variant="small" className="text-blue-gray-500 text-xs mb-3 block">
-                Tới ca bấm <strong>Bắt đầu làm</strong>, tan ca bấm <strong>Kết thúc</strong>. QL xác nhận giờ cuối ngày.
+                Tới ca quét mã QR trên máy POS tại quán để <strong>Vào ca</strong>, tan ca quét lại để <strong>Kết thúc</strong>. QL xác nhận giờ cuối ngày.
               </Typography>
               {shifts.length === 0 ? (
                 <Typography variant="small" className="text-amber-800">
@@ -257,20 +279,56 @@ export default function Attendance() {
                         <div className="font-medium">{block.storeName}</div>
                         <div className="text-blue-gray-600">Ca đăng ký: {block.startTime} – {block.endTime}</div>
                         {!blockAtt && (
-                          <Button color="green" size="md" className="w-full normal-case" disabled={punching}
-                            onClick={() => handleCheckIn(block.id)}>
-                            {punching ? "Đang xử lý..." : "Bắt đầu làm"}
-                          </Button>
+                          <div className="space-y-1.5">
+                            <Button
+                              color="green"
+                              size="md"
+                              className="w-full normal-case flex items-center justify-center gap-2 shadow-sm py-2.5 text-sm"
+                              disabled={punching}
+                              onClick={() => {
+                                setActivePunchShift({ ...block, action: "check-in" });
+                                setQrModalOpen(true);
+                              }}
+                            >
+                              <span className="text-base">📷</span> Quét QR tại quán để Vào ca
+                            </Button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleCheckIn(block.id)}
+                                className="text-[11px] text-gray-500 hover:text-blue-600 block mx-auto underline"
+                              >
+                                (Admin: Vào ca thủ công)
+                              </button>
+                            )}
+                          </div>
                         )}
                         {blockAtt?.reviewStatus === "Open" && (
                           <div className="space-y-2">
                             <Typography variant="small" className="text-green-700 font-medium">
                               ✓ Đang ca · vào lúc {blockAtt.actualCheckIn}
                             </Typography>
-                            <Button color="blue" size="md" className="w-full normal-case" disabled={punching}
-                              onClick={() => handleCheckOut(blockAtt.id)}>
-                              Kết thúc ca
+                            <Button
+                              color="blue"
+                              size="md"
+                              className="w-full normal-case flex items-center justify-center gap-2 shadow-sm py-2.5 text-sm"
+                              disabled={punching}
+                              onClick={() => {
+                                setActivePunchShift({ ...block, action: "check-out", attendanceId: blockAtt.id });
+                                setQrModalOpen(true);
+                              }}
+                            >
+                              <span className="text-base">📷</span> Quét QR tại quán để Kết thúc ca
                             </Button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleCheckOut(blockAtt.id)}
+                                className="text-[11px] text-gray-500 hover:text-blue-600 block mx-auto underline"
+                              >
+                                (Admin: Kết thúc thủ công)
+                              </button>
+                            )}
                           </div>
                         )}
                         {blockAtt?.reviewStatus === "PendingReview" && (
@@ -322,118 +380,118 @@ export default function Attendance() {
           )}
 
           {!showManagerDayTable && (
-          <MobileListShell
-            loading={loading}
-            empty={!loading && records.length === 0}
-            emptyText={
-              viewMonth
-                ? `Chưa có chấm công trong tháng ${filterDate?.slice(5, 7)}/${filterDate?.slice(0, 4)}.`
-                : `Chưa có chấm công ngày ${formatDateVi(filterDate)}.`
-            }
-            count={records.length}
-          >
-            {records.map((r) => (
-              <MobileCard key={r.id}>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Typography variant="small" className="font-semibold">{r.employeeName}</Typography>
-                  {r.flaggedForReview && <Chip size="sm" color="red" value="⚠" className="px-1" />}
-                </div>
-                <Typography variant="small" color="gray" className="text-xs font-mono">{r.employeeCode}</Typography>
-                <MobileRow label="Cửa hàng">{r.storeName}</MobileRow>
-                <MobileRow label="Ngày">{formatDateVi(r.workDate?.slice(0, 10))}</MobileRow>
-                {r.status === "Worked" && (
-                  <>
-                    {r.actualCheckIn && <MobileRow label="NV bấm">{r.actualCheckIn}–{r.actualCheckOut || "…"}</MobileRow>}
-                    <MobileRow label="Giờ duyệt">{r.checkIn}–{r.checkOut || "—"}</MobileRow>
-                    <MobileRow label="Số giờ">{formatHoursMinutes(r.workedHours)}</MobileRow>
-                  </>
-                )}
-                <MobileRow label="Trạng thái">
-                  <Chip size="sm" color={statusColors[r.status] || "gray"} value={statusLabel(r)} className="w-fit ml-auto normal-case" />
-                </MobileRow>
-                {r.reviewStatus && (
-                  <MobileRow label="Duyệt">
-                    <Chip size="sm" color={reviewColors[r.reviewStatus] || "gray"}
-                      value={r.reviewStatusLabel || r.reviewStatus} className="w-fit ml-auto normal-case" />
+            <MobileListShell
+              loading={loading}
+              empty={!loading && records.length === 0}
+              emptyText={
+                viewMonth
+                  ? `Chưa có chấm công trong tháng ${filterDate?.slice(5, 7)}/${filterDate?.slice(0, 4)}.`
+                  : `Chưa có chấm công ngày ${formatDateVi(filterDate)}.`
+              }
+              count={records.length}
+            >
+              {records.map((r) => (
+                <MobileCard key={r.id}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Typography variant="small" className="font-semibold">{r.employeeName}</Typography>
+                    {r.flaggedForReview && <Chip size="sm" color="red" value="⚠" className="px-1" />}
+                  </div>
+                  <Typography variant="small" color="gray" className="text-xs font-mono">{r.employeeCode}</Typography>
+                  <MobileRow label="Cửa hàng">{r.storeName}</MobileRow>
+                  <MobileRow label="Ngày">{formatDateVi(r.workDate?.slice(0, 10))}</MobileRow>
+                  {r.status === "Worked" && (
+                    <>
+                      {r.actualCheckIn && <MobileRow label="NV bấm">{r.actualCheckIn}–{r.actualCheckOut || "…"}</MobileRow>}
+                      <MobileRow label="Giờ duyệt">{r.checkIn}–{r.checkOut || "—"}</MobileRow>
+                      <MobileRow label="Số giờ">{formatHoursMinutes(r.workedHours)}</MobileRow>
+                    </>
+                  )}
+                  <MobileRow label="Trạng thái">
+                    <Chip size="sm" color={statusColors[r.status] || "gray"} value={statusLabel(r)} className="w-fit ml-auto normal-case" />
                   </MobileRow>
-                )}
-                {canOperate && (
-                  <button type="button" onClick={() => handleDelete(r.id)} className="text-xs text-red-500 font-medium pt-1 border-t border-blue-gray-100 w-full text-left">
-                    Xóa
-                  </button>
-                )}
-              </MobileCard>
-            ))}
-          </MobileListShell>
+                  {r.reviewStatus && (
+                    <MobileRow label="Duyệt">
+                      <Chip size="sm" color={reviewColors[r.reviewStatus] || "gray"}
+                        value={r.reviewStatusLabel || r.reviewStatus} className="w-fit ml-auto normal-case" />
+                    </MobileRow>
+                  )}
+                  {canOperate && (
+                    <button type="button" onClick={() => handleDelete(r.id)} className="text-xs text-red-500 font-medium pt-1 border-t border-blue-gray-100 w-full text-left">
+                      Xóa
+                    </button>
+                  )}
+                </MobileCard>
+              ))}
+            </MobileListShell>
           )}
 
           {!showManagerDayTable && (
-          <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-blue-600 text-white">
-                <th className="px-4 py-2.5 text-center w-10">STT</th>
-                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("employeeName")}>Nhân viên <SortIcon active={sortKey === "employeeName"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("storeName")}>Cửa hàng <SortIcon active={sortKey === "storeName"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("workDate")}>Ngày <SortIcon active={sortKey === "workDate"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-center">NV bấm</th>
-                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("checkIn")}>Giờ duyệt <SortIcon active={sortKey === "checkIn"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("workedHours")}>Số giờ <SortIcon active={sortKey === "workedHours"} dir={sortDir} /></th>
-                <th className="px-4 py-2.5 text-center">Duyệt</th>
-                <th className="px-4 py-2.5 text-center">TT</th>
-                {canOperate && <th className="px-4 py-2.5 text-center">Thao tác</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={10} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
-              ) : records.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="py-10 px-4 text-center text-gray-500 text-sm">
-                    {`Chưa có chấm công ngày ${formatDateVi(filterDate)}.`}
-                  </td>
-                </tr>
-              ) : sorted.map((r, i) => (
-                <tr key={r.id} className={`${i % 2 === 0 ? "bg-white" : "bg-blue-50/30"} ${r.flaggedForReview ? "ring-1 ring-inset ring-red-200" : ""}`}>
-                  <td className="px-4 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
-                  <td className="px-4 py-2.5 font-medium">
-                    {r.employeeName} {r.flaggedForReview && <span className="text-red-500" title="Cảnh báo">⚠</span>}
-                    <span className="text-xs text-gray-400 block">{r.employeeCode}</span>
-                    {canViewOps && (
-                      <button
-                        type="button"
-                        onClick={() => setFaceHistoryEmp({ id: r.employeeId, name: r.employeeName, code: r.employeeCode, date: r.workDate?.slice(0, 10) })}
-                        className="mt-0.5 text-[11px] text-blue-600 hover:underline"
-                        title="Xem lịch sử nhận diện khuôn mặt"
-                      >
-                        Lịch sử nhận diện
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-600">{r.storeName}</td>
-                  <td className="px-4 py-2.5 text-center whitespace-nowrap">{formatDateVi(r.workDate?.slice(0, 10))}</td>
-                  <td className="px-4 py-2.5 text-center font-mono text-xs">
-                    {r.actualCheckIn ? `${r.actualCheckIn}–${r.actualCheckOut || "…"}` : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-center font-mono">{r.status === "Worked" ? `${r.checkIn}–${r.checkOut || "—"}` : "—"}</td>
-                  <td className="px-4 py-2.5 text-center">{r.status === "Worked" && r.reviewStatus === "Confirmed" ? formatHoursMinutes(r.workedHours) : "—"}</td>
-                  <td className="px-4 py-2.5 text-center">
-                    <Chip size="sm" color={reviewColors[r.reviewStatus] || "gray"}
-                      value={r.reviewStatusLabel || r.reviewStatus || "—"} className="w-fit mx-auto normal-case" />
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    <Chip size="sm" color={statusColors[r.status] || "gray"} value={statusLabel(r)} className="w-fit mx-auto normal-case" />
-                  </td>
-                  {canOperate && (
-                    <td className="px-4 py-2.5 text-center">
-                      <button onClick={() => handleDelete(r.id)} className="text-xs text-red-500 hover:underline">Xóa</button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-blue-600 text-white">
+                    <th className="px-4 py-2.5 text-center w-10">STT</th>
+                    <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("employeeName")}>Nhân viên <SortIcon active={sortKey === "employeeName"} dir={sortDir} /></th>
+                    <th className="px-4 py-2.5 text-left cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("storeName")}>Cửa hàng <SortIcon active={sortKey === "storeName"} dir={sortDir} /></th>
+                    <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("workDate")}>Ngày <SortIcon active={sortKey === "workDate"} dir={sortDir} /></th>
+                    <th className="px-4 py-2.5 text-center">NV bấm</th>
+                    <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("checkIn")}>Giờ duyệt <SortIcon active={sortKey === "checkIn"} dir={sortDir} /></th>
+                    <th className="px-4 py-2.5 text-center cursor-pointer select-none hover:bg-blue-700" onClick={() => handleSort("workedHours")}>Số giờ <SortIcon active={sortKey === "workedHours"} dir={sortDir} /></th>
+                    <th className="px-4 py-2.5 text-center">Duyệt</th>
+                    <th className="px-4 py-2.5 text-center">TT</th>
+                    {canOperate && <th className="px-4 py-2.5 text-center">Thao tác</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={10} className="py-10 text-center text-gray-400">Đang tải...</td></tr>
+                  ) : records.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="py-10 px-4 text-center text-gray-500 text-sm">
+                        {`Chưa có chấm công ngày ${formatDateVi(filterDate)}.`}
+                      </td>
+                    </tr>
+                  ) : sorted.map((r, i) => (
+                    <tr key={r.id} className={`${i % 2 === 0 ? "bg-white" : "bg-blue-50/30"} ${r.flaggedForReview ? "ring-1 ring-inset ring-red-200" : ""}`}>
+                      <td className="px-4 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
+                      <td className="px-4 py-2.5 font-medium">
+                        {r.employeeName} {r.flaggedForReview && <span className="text-red-500" title="Cảnh báo">⚠</span>}
+                        <span className="text-xs text-gray-400 block">{r.employeeCode}</span>
+                        {canViewOps && (
+                          <button
+                            type="button"
+                            onClick={() => setFaceHistoryEmp({ id: r.employeeId, name: r.employeeName, code: r.employeeCode, date: r.workDate?.slice(0, 10) })}
+                            className="mt-0.5 text-[11px] text-blue-600 hover:underline"
+                            title="Xem lịch sử nhận diện khuôn mặt"
+                          >
+                            Lịch sử nhận diện
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-600">{r.storeName}</td>
+                      <td className="px-4 py-2.5 text-center whitespace-nowrap">{formatDateVi(r.workDate?.slice(0, 10))}</td>
+                      <td className="px-4 py-2.5 text-center font-mono text-xs">
+                        {r.actualCheckIn ? `${r.actualCheckIn}–${r.actualCheckOut || "…"}` : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-center font-mono">{r.status === "Worked" ? `${r.checkIn}–${r.checkOut || "—"}` : "—"}</td>
+                      <td className="px-4 py-2.5 text-center">{r.status === "Worked" && r.reviewStatus === "Confirmed" ? formatHoursMinutes(r.workedHours) : "—"}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <Chip size="sm" color={reviewColors[r.reviewStatus] || "gray"}
+                          value={r.reviewStatusLabel || r.reviewStatus || "—"} className="w-fit mx-auto normal-case" />
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <Chip size="sm" color={statusColors[r.status] || "gray"} value={statusLabel(r)} className="w-fit mx-auto normal-case" />
+                      </td>
+                      {canOperate && (
+                        <td className="px-4 py-2.5 text-center">
+                          <button onClick={() => handleDelete(r.id)} className="text-xs text-red-500 hover:underline">Xóa</button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardBody>
       </Card>
@@ -458,6 +516,13 @@ export default function Attendance() {
         employee={faceHistoryEmp}
         date={faceHistoryEmp?.date}
         onClose={() => setFaceHistoryEmp(null)}
+      />
+
+      <QrAttendanceScannerModal
+        open={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        onScanSuccess={handleQrPunch}
+        shiftInfo={activePunchShift}
       />
     </div>
   );

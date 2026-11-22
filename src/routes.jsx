@@ -11,6 +11,7 @@ import {
   VideoCameraIcon,
   BriefcaseIcon,
   ChartBarIcon,
+  BookOpenIcon,
 } from "@heroicons/react/24/solid";
 
 import Home from "@/pages/dashboard/Home";
@@ -26,6 +27,7 @@ import Cameras from "@/pages/dashboard/Cameras";
 import Profile from "@/pages/dashboard/Profile";
 import Announcements from "@/pages/dashboard/Announcements";
 import Recruitment from "@/pages/dashboard/Recruitment";
+import AdminGuide from "@/pages/dashboard/AdminGuide";
 
 const icon = { className: "w-5 h-5 text-inherit" };
 
@@ -43,6 +45,7 @@ export const dashboardRoutesConfig = [
   { path: "/recruitment",         element: <Recruitment />,        name: "Tuyển dụng",     icon: <BriefcaseIcon {...icon} />,               roles: ["Admin", "Manager"] },
   { path: "/profile",             element: <Profile />,            name: "Thông tin",      icon: <UserCircleIcon {...icon} />,              roles: ["Employee"] },
   { path: "/config",              element: <AdminConfig />,        name: "Cấu hình",       icon: <Cog6ToothIcon {...icon} />,               roles: ["Admin"] },
+  { path: "/guide",               element: <AdminGuide />,         name: "Hướng dẫn",      icon: <BookOpenIcon {...icon} />,                roles: ["Admin"] },
 ];
 
 /** role = vai trò hiệu lực (Manager ở chế độ NV → "Employee"). */
